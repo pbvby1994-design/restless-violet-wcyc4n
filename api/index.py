@@ -1,3 +1,5 @@
+# Файл: api/index.py (Для запуска на Vercel)
+
 import os
 import io
 import logging
@@ -5,12 +7,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from gtts import gTTS
-import uvicorn # Vercel использует uvicorn
+import uvicorn 
 
 logging.basicConfig(level=logging.INFO)
 
 # --- Настройка Web App API (FastAPI) ---
-# Vercel ищет переменную "app" для запуска
 app = FastAPI(
     title="Vercel TTS API",
     description="API для генерации аудио из текста на Vercel"
@@ -29,7 +30,7 @@ app.add_middleware(
 def read_root():
     return {"message": "TTS API is running on Vercel"}
 
-# ИСПРАВЛЕНО: Убран конечный слэш для синхронизации с фронтендом и vercel.json
+# ✅ ИСПРАВЛЕНИЕ: Убран конечный слэш для синхронизации с фронтендом и vercel.json
 @app.post("/api/tts/generate") 
 async def generate_speech(data: dict):
     """Эндпоинт для генерации речи из текста."""
