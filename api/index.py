@@ -1,5 +1,3 @@
-# Файл: api/index.py (Для запуска на Vercel)
-
 import os
 import io
 import logging
@@ -31,7 +29,8 @@ app.add_middleware(
 def read_root():
     return {"message": "TTS API is running on Vercel"}
 
-@app.post("/api/tts/generate/")
+# ИСПРАВЛЕНО: Убран конечный слэш для синхронизации с фронтендом и vercel.json
+@app.post("/api/tts/generate") 
 async def generate_speech(data: dict):
     """Эндпоинт для генерации речи из текста."""
     text = data.get("text")
@@ -65,8 +64,5 @@ async def generate_speech(data: dict):
 
     except Exception as e:
         logging.error(f"TTS generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal TTS error: Could not generate audio.")
-
-# Этот блок необходим для локального тестирования, но Vercel его игнорирует
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        # Возвращаем ошибку 500
+        raise HTTPException(status_code=500, detail=f"Internal TTS error: {e}")
