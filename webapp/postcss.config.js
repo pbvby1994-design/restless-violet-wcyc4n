@@ -4,4 +4,5 @@ module.exports = {
       tailwindcss: {},
       autoprefixer: {},
     },
+
   };
