@@ -1,3 +1,4 @@
+// Файл: vercel.json
 {
     "version": 2,
     "builds": [
@@ -12,7 +13,7 @@
     ],
     "routes": [
       {
-        "src": "/api/tts/generate/?",
+        "src": "/api/tts/generate",
         "dest": "api/index.py"
       },
       {
