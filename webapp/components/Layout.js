@@ -1,4 +1,3 @@
-// Файл: components/Layout.js
 import { useEffect, useState } from 'react';
 import { init } from '@twa-dev/sdk';
 
@@ -35,6 +34,7 @@ const Layout = ({ children }) => {
 
   return (
     // Добавляем классы dark: для поддержки темной темы Telegram
+    // ИСПРАВЛЕНО: Классная строка завершена корректно.
     <div className="min-h-screen p-4 bg-zinc-50 dark:bg-zinc-900 transition-colors duration-300">
       {children}
     </div>
