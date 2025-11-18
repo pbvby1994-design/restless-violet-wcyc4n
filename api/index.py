@@ -1,13 +1,13 @@
-# Файл: api/index.py (ОТЛАДОЧНАЯ ВЕРСИЯ для проверки маршрутизации)
+# Файл: api/index.py (Финальная версия с StreamingResponse)
 
 import os
-# import io <--- УДАЛИТЬ ИЛИ ЗАКОММЕНТИРОВАТЬ
+import io
 import logging
 from fastapi import FastAPI, HTTPException
-# from fastapi.responses import FileResponse, JSONResponse <--- УДАЛИТЬ ИЛИ ЗАКОММЕНТИРОВАТЬ
-from fastapi.responses import JSONResponse # Оставим только JSONResponse
+# 🛑 ИЗМЕНЕНИЕ: Используем StreamingResponse вместо FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse 
 from fastapi.middleware.cors import CORSMiddleware
-# from gtts import gTTS <--- УДАЛИТЬ ИЛИ ЗАКОММЕНТИРОВАТЬ
+from gtts import gTTS
 import uvicorn 
 
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +17,6 @@ app = FastAPI(
     description="API для генерации аудио из текста на Vercel"
 )
 
-# Разрешаем CORS (оставить)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -35,15 +34,33 @@ def read_root():
 async def generate_speech(data: dict):
     """Эндпоинт для генерации речи из текста."""
     text = data.get("text")
+    voice_name = data.get("voice", "default") 
     
     if not text:
         raise HTTPException(status_code=400, detail="Text field is required")
 
-    # 🛑 ВРЕМЕННЫЙ ФИКС: Вместо gTTS возвращаем JSON
-    logging.info(f"Received text for TTS: {text[:20]}...")
-    
-    # Возвращаем простой JSON-ответ 200 OK
-    return JSONResponse(
-        status_code=200,
-        content={"message": "API route successful. TTS functionality is temporarily disabled."},
-    )
+    if len(text) > 5000:
+        raise HTTPException(status_code=400, detail="Text is too long.")
+
+    try:
+        # Бесплатная генерация через gTTS 
+        tts = gTTS(text=text, lang='ru', slow=False) 
+        
+        mp3_fp = io.BytesIO()
+        tts.write_to_fp(mp3_fp)
+        mp3_fp.seek(0)
+        
+        # ✅ ИСПРАВЛЕНИЕ: Возвращаем StreamingResponse
+        return StreamingResponse(
+            mp3_fp, 
+            media_type="audio/mp3", 
+            headers={
+                "Content-Disposition": "attachment; filename=speech.mp3",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+
+    except Exception as e:
+        logging.error(f"TTS generation error: {e}")
+        # Возвращаем 500 ошибку с деталями для отладки
+        raise HTTPException(status_code=500, detail=f"TTS generation error: {e}")
