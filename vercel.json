@@ -2,11 +2,9 @@
     "version": 2,
     "builds": [
       {
+        // Указываем, что Next.js живет в папке webapp
         "src": "webapp/package.json",
-        "use": "@vercel/next",
-        "config": {
-          "outputDirectory": "webapp"
-        }
+        "use": "@vercel/next"
       },
       {
         "src": "api/index.py",
@@ -16,7 +14,7 @@
     "routes": [
       {
         "src": "/api/tts/generate",  
-        "dest": "api/index.py"
+        "dest": "/api/index.py"
       },
       {
         "src": "/(.*)",
