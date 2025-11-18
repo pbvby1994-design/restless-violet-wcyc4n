@@ -1,22 +1,22 @@
-// Файл: webapp/pages/index.js
+// Файл: pages/index.js
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import Layout from '../components/Layout';
+// Убедитесь, что пути импорта Layout и Player правильные для Codesandbox/Vercel
+import Layout from '../components/Layout'; 
 import Player from '../components/Player';
 
-// URL вашего FastAPI бэкенда.
-// !!! Замените localhost:8000 на ваш реальный URL (например, ngrok или сервер) !!!
-const TTS_API_URL = 'http://localhost:8000/api/tts/generate/';
+// !!! НОВЫЙ АДРЕС ДЛЯ VERCEL !!!
+// API теперь находится на том же домене, что и фронтенд (restless-violet-wcy6cn.vercel.app),
+// поэтому мы используем относительный путь. Vercel направит его в api/index.py.
+const TTS_API_URL = '/api/tts/generate/'; 
 
 const Home = () => {
   const [text, setText] = useState('');
   const [currentAudio, setCurrentAudio] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedVoice, setSelectedVoice] = useState('default'); // Текущий голос
+  const [selectedVoice, setSelectedVoice] = useState('default'); 
 
-  // Эффект нажатия для кнопок
   const tapEffect = { scale: 0.95 };
 
   const handleTextToSpeech = useCallback(async () => {
@@ -29,7 +29,6 @@ const Home = () => {
     if (currentAudio) {
       currentAudio.pause();
       setCurrentAudio(null);
-      setIsPlaying(false);
     }
 
     setLoading(true);
@@ -41,31 +40,33 @@ const Home = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        // Отправляем текст и выбранный голос на Vercel API
         body: JSON.stringify({ text, voice: selectedVoice }),
       });
 
       if (response.status === 403) {
-        // Обработка заглушки премиум-функции
-        throw new Error("Premium voices are not yet implemented (Feature Blocked).");
+        throw new Error("Premium voices are not yet implemented.");
       }
       
       if (!response.ok) {
-        throw new Error(`Server error: ${response.statusText}`);
+        // Ловим ошибки Vercel API (например, слишком длинный текст)
+        const errorData = await response.json();
+        throw new Error(`Ошибка API: ${errorData.detail || response.statusText}`);
       }
       
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       
-      // Настройка обработчиков событий для плеера
-      audio.onended = () => setIsPlaying(false);
-      audio.onplay = () => setIsPlaying(true);
-      audio.onpause = () => setIsPlaying(false);
-
+      // Настройка обработчиков событий аудио
+      audio.onended = () => setCurrentAudio(a => a ? {...a, paused: true} : null);
+      audio.onplay = () => setCurrentAudio(a => a ? {...a, paused: false} : null);
+      audio.onpause = () => setCurrentAudio(a => a ? {...a, paused: true} : null);
+      
       await audio.play();
       
       setCurrentAudio(audio);
-      setIsPlaying(true);
+      
     } catch (err) {
       console.error("TTS Fetch Error:", err);
       setError(`Не удалось сгенерировать голос: ${err.message}`);
@@ -84,9 +85,10 @@ const Home = () => {
     }
   }, [currentAudio]);
 
+
   return (
     <Layout>
-      <div className="max-w-xl mx-auto pb-32"> {/* pb-32 для отступа под плеером */}
+      <div className="max-w-xl mx-auto pb-48"> 
         <motion.h1 
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -102,7 +104,7 @@ const Home = () => {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
           className="w-full p-4 h-48 border-2 border-gray-300 dark:border-zinc-700 rounded-xl resize-none focus:ring-blue-500 focus:border-blue-500 transition-shadow dark:bg-zinc-700 dark:text-white"
-          placeholder="Вставьте текст или загрузите документ (функция загрузки документа будет добавлена на стороне бота)..."
+          placeholder="Вставьте текст..."
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -124,7 +126,7 @@ const Home = () => {
 
           <motion.button
             whileTap={tapEffect}
-            disabled={true} // Пока не реализовано
+            disabled={true} 
             className="w-full py-3 rounded-xl font-semibold text-lg transition-colors bg-green-200 text-green-700 dark:bg-green-700 dark:text-green-200 cursor-not-allowed opacity-70"
           >
             📎 Загрузить Документ (WIP)
@@ -140,6 +142,7 @@ const Home = () => {
         loading={loading}
         error={error}
         voice={selectedVoice}
+        setVoice={setSelectedVoice}
       />
     </Layout>
   );
