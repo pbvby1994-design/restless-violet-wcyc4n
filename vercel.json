@@ -12,7 +12,7 @@
     ],
     "routes": [
       {
-        "src": "/api/tts/generate/?",  <-- ИСПРАВЛЕНИЕ: Делает конечный слэш необязательным
+        "src": "/api/tts/generate/?",
         "dest": "api/index.py"
       },
       {
