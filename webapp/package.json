@@ -1,27 +1,27 @@
 {
-  "name": "telegram-tts-webapp",
-  "version": "1.0.0",
-  "description": "Telegram Mini App for Text-to-Speech",
-  "main": "index.js",
+  "name": "telegram-tts-webapp"
+  "version": "1.0.0"
+  "description": "Telegram Mini App for Text-to-Speech"
+  "main": "index.js"
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "next dev"
+    "build": "next build"
+    "start": "next start"
     "lint": "next lint"
-  },
-  "keywords": [],
-  "author": "Your Name",
+  }
+  "keywords": []
+  "author": "Your Name"
   "license": "MIT",
-  "devDependencies": {},
+  "devDependencies": {}
   "dependencies": {
-    "next": "14.2.5",    
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "@twa-dev/sdk": "8.0.1",
-    "autoprefixer": "10.4.21",
-    "framer-motion": "12.23.24",
-    "postcss": "8.5.6",
-    "resolve-from": "5.0.0",
+    "next": "14.2.5"   
+    "react": "18.3.1"
+    "react-dom": "18.3.1"
+    "@twa-dev/sdk": "8.0.1"
+    "autoprefixer": "10.4.21"
+    "framer-motion": "12.23.24"
+    "postcss": "8.5.6"
+    "resolve-from": "5.0.0"
     "tailwindcss": "4.1.17"
   }
 }
