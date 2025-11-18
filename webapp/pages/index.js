@@ -1,10 +1,11 @@
+// Файл: webapp/pages/index.js
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic'; 
 
 import Player from '../components/Player';
 
-// 1. ДИНАМИЧЕСКИ ИМПОРТИРУЕМ Layout, ОТКЛЮЧАЯ SSR
+// 1. ДИНАМИЧЕСКИ ИМПОРТИРУЕМ Layout, ОТКЛЮЧАЯ SSR (важно для SDK Telegram)
 const Layout = dynamic(() => import('../components/Layout'), { 
   ssr: false, 
   loading: () => (
@@ -14,8 +15,7 @@ const Layout = dynamic(() => import('../components/Layout'), {
   )
 });
 
-// !!! НОВЫЙ АДРЕС ДЛЯ VERCEL !!!
-// ИСПРАВЛЕНО: Убран конечный слэш
+// ✅ ИСПРАВЛЕНО: Путь к API без конечного слэша
 const TTS_API_URL = '/api/tts/generate'; 
 
 const Home = () => {
@@ -51,7 +51,9 @@ const Home = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`Ошибка API: ${response.statusText}`);
+        // Пробуем прочитать ошибку из тела ответа для лучшего сообщения
+        const errorText = await response.text();
+        throw new Error(`Ошибка API (${response.status}): ${errorText.substring(0, 100)}...`);
       }
 
       const blob = await response.blob();
@@ -63,7 +65,7 @@ const Home = () => {
 
     } catch (err) {
       console.error(err);
-      setError('Не удалось сгенерировать аудио. Попробуйте снова.');
+      setError(`Не удалось сгенерировать аудио: ${err.message || 'Проверьте логи Vercel.'}`);
     } finally {
       setLoading(false);
     }
