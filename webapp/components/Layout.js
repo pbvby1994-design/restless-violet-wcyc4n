@@ -1,5 +1,7 @@
+// Файл: webapp/components/Layout.js
 import { useEffect, useState } from 'react';
-import { init } from '@twa-dev/sdk';
+// SDK ИМПОРТИРУЕТСЯ ЗДЕСЬ И ВЫЗЫВАЕТ ОШИБКУ
+import { init } from '@twa-dev/sdk'; 
 
 const Layout = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
@@ -7,8 +9,8 @@ const Layout = ({ children }) => {
   useEffect(() => {
     try {
       // Инициализация SDK
-      init();
-      const tg = window.Telegram.WebApp;
+      init(); 
+      const tg = window.Telegram.WebApp; // ЭТО ВЫЗЫВАЕТ ОШИБКУ
       
       // Настройка цвета фона
       document.body.style.backgroundColor = tg.themeParams.bg_color || '#f4f4f5';
@@ -18,7 +20,6 @@ const Layout = ({ children }) => {
 
       setIsReady(true);
     } catch (e) {
-      // Выводим ошибку, но продолжаем, чтобы можно было тестировать в браузере
       console.error("Telegram WebApp SDK failed to initialize:", e);
       setIsReady(true);
     }
@@ -33,8 +34,7 @@ const Layout = ({ children }) => {
   }
 
   return (
-    // Добавляем классы dark: для поддержки темной темы Telegram
-    // ИСПРАВЛЕНО: Классная строка завершена корректно.
+    // ИСПРАВЛЕНО: Полная строка className
     <div className="min-h-screen p-4 bg-zinc-50 dark:bg-zinc-900 transition-colors duration-300">
       {children}
     </div>
