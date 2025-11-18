@@ -3,7 +3,11 @@
     "builds": [
       {
         "src": "webapp/package.json",
-        "use": "@vercel/next"
+        "use": "@vercel/next",
+        // ✅ ИСПРАВЛЕНИЕ: Указываем Vercel, что результат сборки Next.js находится внутри папки webapp
+        "config": {
+          "outputDirectory": "webapp"
+        }
       },
       {
         "src": "api/index.py",
@@ -12,10 +16,12 @@
     ],
     "routes": [
       {
+        // ✅ ИСПРАВЛЕНИЕ: Точный маршрут к API без слэша и регулярных выражений
         "src": "/api/tts/generate",  
         "dest": "api/index.py"
       },
       {
+        // Маршрут для всех остальных файлов (фронтенд)
         "src": "/(.*)",
         "dest": "webapp/$1"
       }
