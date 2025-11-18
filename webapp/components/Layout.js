@@ -1,27 +1,40 @@
 // Файл: webapp/components/Layout.js
 import { useEffect, useState } from 'react';
-// SDK ИМПОРТИРУЕТСЯ ЗДЕСЬ И ВЫЗЫВАЕТ ОШИБКУ
-import { init } from '@twa-dev/sdk'; 
+// ❌ Исходный код: import { init } from '@twa-dev/sdk';
+// ✅ ИСПРАВЛЕНИЕ: Импортируем весь SDK как объект WebApp
+import WebApp from '@twa-dev/sdk';
 
 const Layout = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    try {
-      // Инициализация SDK
-      init(); 
-      const tg = window.Telegram.WebApp; // ЭТО ВЫЗЫВАЕТ ОШИБКУ
-      
-      // Настройка цвета фона
-      document.body.style.backgroundColor = tg.themeParams.bg_color || '#f4f4f5';
-      
-      // Включаем виброотклик при нажатии
-      tg.HapticFeedback.impactOccurred('light');
+    // Добавляем проверку, чтобы код не падал в обычном браузере (вне Telegram)
+    if (WebApp.ready) { 
+        try {
+            // ✅ ИСПРАВЛЕНИЕ: Используем WebApp.ready() вместо init()
+            WebApp.ready(); 
+            const tg = WebApp; // Теперь tg — это объект SDK
 
-      setIsReady(true);
-    } catch (e) {
-      console.error("Telegram WebApp SDK failed to initialize:", e);
-      setIsReady(true);
+            // Настройка цвета фона (используем цвета, предоставленные Telegram)
+            if (tg.themeParams && tg.themeParams.bg_color) {
+                document.body.style.backgroundColor = tg.themeParams.bg_color;
+            } else {
+                document.body.style.backgroundColor = '#f4f4f5'; // Fallback
+            }
+            
+            // Включаем виброотклик
+            tg.HapticFeedback.impactOccurred('light');
+
+            setIsReady(true);
+        } catch (e) {
+            // Выводим ошибку, но продолжаем, чтобы можно было тестировать в браузере
+            console.error("Telegram WebApp SDK failed to initialize:", e);
+            setIsReady(true);
+        }
+    } else {
+        // Запуск в обычном браузере (вне Telegram)
+        console.warn("Telegram WebApp SDK not found. Running in standard browser mode.");
+        setIsReady(true);
     }
   }, []);
 
@@ -34,7 +47,7 @@ const Layout = ({ children }) => {
   }
 
   return (
-    // ИСПРАВЛЕНО: Полная строка className
+    // Добавляем классы dark: для поддержки темной темы Telegram
     <div className="min-h-screen p-4 bg-zinc-50 dark:bg-zinc-900 transition-colors duration-300">
       {children}
     </div>
