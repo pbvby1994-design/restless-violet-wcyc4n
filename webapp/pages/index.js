@@ -1,13 +1,22 @@
-// Файл: pages/index.js
+// Файл: webapp/pages/index.js
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-// Убедитесь, что пути импорта Layout и Player правильные для Codesandbox/Vercel
-import Layout from '../components/Layout'; 
+import dynamic from 'next/dynamic'; // <-- ИМПОРТ DYNAMIC
+
+// Убираем: import Layout from '../components/Layout';
 import Player from '../components/Player';
 
+// 1. ДИНАМИЧЕСКИ ИМПОРТИРУЕМ Layout, ОТКЛЮЧАЯ SSR
+const Layout = dynamic(() => import('../components/Layout'), { 
+  ssr: false, 
+  loading: () => (
+    <div className="flex justify-center items-center h-screen text-lg bg-zinc-100 dark:bg-zinc-800">
+        Инициализация WebApp...
+    </div>
+  )
+});
+
 // !!! НОВЫЙ АДРЕС ДЛЯ VERCEL !!!
-// API теперь находится на том же домене, что и фронтенд (restless-violet-wcy6cn.vercel.app),
-// поэтому мы используем относительный путь. Vercel направит его в api/index.py.
 const TTS_API_URL = '/api/tts/generate/'; 
 
 const Home = () => {
@@ -25,7 +34,6 @@ const Home = () => {
       return;
     }
     
-    // Остановка предыдущего аудио
     if (currentAudio) {
       currentAudio.pause();
       setCurrentAudio(null);
@@ -33,77 +41,47 @@ const Home = () => {
 
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetch(TTS_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        // Отправляем текст и выбранный голос на Vercel API
         body: JSON.stringify({ text, voice: selectedVoice }),
       });
 
-      if (response.status === 403) {
-        throw new Error("Premium voices are not yet implemented.");
-      }
-      
       if (!response.ok) {
-        // Ловим ошибки Vercel API (например, слишком длинный текст)
-        const errorData = await response.json();
-        throw new Error(`Ошибка API: ${errorData.detail || response.statusText}`);
+        throw new Error(`Ошибка API: ${response.statusText}`);
       }
-      
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
+
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
       const audio = new Audio(audioUrl);
       
-      // Настройка обработчиков событий аудио
-      audio.onended = () => setCurrentAudio(a => a ? {...a, paused: true} : null);
-      audio.onplay = () => setCurrentAudio(a => a ? {...a, paused: false} : null);
-      audio.onpause = () => setCurrentAudio(a => a ? {...a, paused: true} : null);
-      
-      await audio.play();
-      
       setCurrentAudio(audio);
-      
+      audio.play();
+
     } catch (err) {
-      console.error("TTS Fetch Error:", err);
-      setError(`Не удалось сгенерировать голос: ${err.message}`);
+      console.error(err);
+      setError('Не удалось сгенерировать аудио. Попробуйте снова.');
     } finally {
       setLoading(false);
     }
   }, [text, currentAudio, selectedVoice]);
 
-  const togglePlay = useCallback(() => {
-    if (currentAudio) {
-      if (currentAudio.paused) {
-        currentAudio.play();
-      } else {
-        currentAudio.pause();
-      }
-    }
-  }, [currentAudio]);
-
-
   return (
     <Layout>
-      <div className="max-w-xl mx-auto pb-48"> 
-        <motion.h1 
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="text-3xl font-bold mb-6 text-center text-blue-600 dark:text-blue-400"
-        >
-          🗣️ Читатель Голосом
-        </motion.h1>
+      <div className="max-w-md mx-auto p-4">
+        {/* Заголовок */}
+        <h1 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white">
+          🎤 Текст в Речь Mini App
+        </h1>
 
-        {/* Поле ввода текста */}
-        <motion.textarea
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="w-full p-4 h-48 border-2 border-gray-300 dark:border-zinc-700 rounded-xl resize-none focus:ring-blue-500 focus:border-blue-500 transition-shadow dark:bg-zinc-700 dark:text-white"
+        {/* Поле для текста */}
+        <textarea
+          rows="8"
+          className="w-full p-3 border rounded-xl focus:ring-blue-500 focus:border-blue-500 bg-zinc-100 dark:bg-zinc-700 dark:border-zinc-700 dark:text-white"
           placeholder="Вставьте текст..."
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -135,18 +113,16 @@ const Home = () => {
       </div>
       
       {/* Компонент Плеера */}
-      <Player 
-        isPlaying={!!currentAudio} 
-        togglePlay={togglePlay} 
-        currentAudio={currentAudio} 
+      <Player
+        isPlaying={!!currentAudio && !currentAudio.paused}
+        togglePlay={() => currentAudio?.paused ? currentAudio.play() : currentAudio?.pause()}
+        currentAudio={currentAudio}
         loading={loading}
         error={error}
         voice={selectedVoice}
-        setVoice={setSelectedVoice}
       />
     </Layout>
   );
 };
 
 export default Home;
-
