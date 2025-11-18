@@ -1,16 +1,22 @@
 {
-  "name": "nodejs-sandbox",
+  "name": "telegram-tts-webapp",
   "version": "1.0.0",
-  "description": "",
+  "description": "Telegram Mini App for Text-to-Speech",
   "main": "index.js",
   "scripts": {
-    "start": "node --watch index.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "keywords": [],
-  "author": "Ives van Hoorne",
+  "author": "Your Name",
   "license": "MIT",
   "devDependencies": {},
   "dependencies": {
+    "next": "14.2.5",  <-- ЭТО НУЖНО ДОБАВИТЬ
+    "react": "18.3.1", <-- ЭТО НУЖНО ДОБАВИТЬ
+    "react-dom": "18.3.1", <-- ЭТО НУЖНО ДОБАВИТЬ
     "@twa-dev/sdk": "8.0.1",
     "autoprefixer": "10.4.21",
     "framer-motion": "12.23.24",
