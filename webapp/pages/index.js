@@ -1,20 +1,20 @@
-// Файл: webapp/pages/index.js
+// Файл: webapp/pages/index.js (Applesque Style)
+
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import Player from '../components/Player';
 
-// Важно: Динамический импорт Layout для корректной работы с Telegram SDK на стороне клиента
+// Динамический импорт Layout для корректной работы с Telegram SDK
 const Layout = dynamic(() => import('../components/Layout'), { 
   ssr: false, 
   loading: () => (
-    <div className="flex justify-center items-center h-screen text-lg bg-zinc-100 dark:bg-zinc-800">
+    <div className="flex justify-center items-center h-screen text-lg text-gray-800 dark:text-gray-200 bg-white dark:bg-black">
         Инициализация WebApp...
     </div>
   )
 });
 
-// Путь API БЕЗ КОНЕЧНОГО СЛЭША (должен совпадать с vercel.json и index.py)
 const TTS_API_URL = '/api/tts/generate'; 
 
 const Home = () => {
@@ -100,18 +100,17 @@ const Home = () => {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        // max-w-xl mx-auto: центрирование, flex flex-col justify-between: прибивает плеер вниз
         className="max-w-xl mx-auto min-h-[calc(100vh-2rem)] flex flex-col justify-between" 
       >
         <div className="flex-grow p-4">
-          <h1 className="text-3xl font-bold mb-4 text-center text-gray-800 dark:text-white">
+          <h1 className="text-4xl font-bold mb-6 text-center text-gray-900 dark:text-white tracking-tight">
             🎙️ Голосовой Ассистент
           </h1>
 
-          {/* Поле ввода */}
-          <div className="relative mb-4">
+          {/* Поле ввода - Clean Design */}
+          <div className="relative mb-6">
             <textarea
-              className="w-full h-40 p-4 pt-8 border-2 rounded-2xl text-lg resize-none focus:ring-blue-500 focus:border-blue-500 bg-zinc-100 dark:bg-zinc-700 dark:text-white transition-all shadow-lg focus:shadow-xl"
+              className="w-full h-48 p-5 pt-8 border border-gray-300 dark:border-zinc-700 rounded-3xl text-lg resize-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-zinc-800 dark:text-white transition-all shadow-lg focus:shadow-xl font-sans"
               placeholder="Введите текст для озвучивания..."
               value={text}
               onChange={(e) => {
@@ -119,47 +118,48 @@ const Home = () => {
                 setError(null);
               }}
             />
-            {/* Счетчик символов */}
-            <div className="absolute top-3 right-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+            {/* Счетчик символов - Тонкий шрифт */}
+            <div className="absolute top-3 right-5 text-sm font-light text-gray-500 dark:text-gray-400">
                 {text.length} / {MAX_CHARS}
             </div>
           </div>
           
 
-          {/* Индикатор Ошибки */}
+          {/* Индикатор Ошибки - Плавное появление */}
           <AnimatePresence>
             {error && (
                 <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{ opacity: 0, scaleY: 0 }}
+                    animate={{ opacity: 1, scaleY: 1 }}
+                    exit={{ opacity: 0, scaleY: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl dark:bg-red-900/50 dark:border-red-600 dark:text-red-300 font-medium overflow-hidden shadow-md"
+                    style={{ originY: 0 }}
+                    className="mt-3 p-4 bg-red-50 border border-red-300 text-red-700 rounded-xl dark:bg-red-900/50 dark:border-red-700 dark:text-red-200 font-medium overflow-hidden shadow-sm"
                 >
                     {error}
                 </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Кнопки действий */}
-          <div className="mt-6 flex flex-col space-y-4">
+          {/* Кнопки действий - Крупные, чистые кнопки */}
+          <div className="mt-8 flex flex-col space-y-4">
             <motion.button
               onClick={handleTextToSpeech}
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.98, backgroundColor: '#1d89ff' }} // Мягкое нажатие, как в iOS
               disabled={loading || text.length < 5}
-              className={`w-full py-3 rounded-2xl font-bold text-lg transition-all transform tracking-wider ${
+              className={`w-full py-4 rounded-xl font-semibold text-xl transition-all tracking-wide ${
                 loading 
                   ? 'bg-blue-400 dark:bg-blue-600 text-white cursor-not-allowed opacity-75'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xl hover:shadow-2xl'
+                  : 'bg-blue-500 hover:bg-blue-600 text-white shadow-xl shadow-blue-500/50 dark:shadow-blue-700/50'
               }`}
             >
               {loading ? '🎤 Генерация...' : '🔊 Слушать Голосом'}
             </motion.button>
 
             <motion.button
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.98 }}
               disabled={true} 
-              className="w-full py-3 rounded-2xl font-bold text-lg transition-colors bg-green-200 text-green-700 dark:bg-green-700 dark:text-green-200 cursor-not-allowed opacity-70"
+              className="w-full py-4 rounded-xl font-semibold text-xl transition-colors bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-gray-400 cursor-not-allowed opacity-70 shadow-md"
             >
               📎 Загрузить Документ (WIP)
             </motion.button>
