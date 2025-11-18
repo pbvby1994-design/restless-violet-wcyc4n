@@ -1,9 +1,7 @@
-// Файл: webapp/pages/index.js
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import dynamic from 'next/dynamic'; // <-- ИМПОРТ DYNAMIC
+import dynamic from 'next/dynamic'; 
 
-// Убираем: import Layout from '../components/Layout';
 import Player from '../components/Player';
 
 // 1. ДИНАМИЧЕСКИ ИМПОРТИРУЕМ Layout, ОТКЛЮЧАЯ SSR
@@ -17,7 +15,8 @@ const Layout = dynamic(() => import('../components/Layout'), {
 });
 
 // !!! НОВЫЙ АДРЕС ДЛЯ VERCEL !!!
-const TTS_API_URL = '/api/tts/generate/'; 
+// ИСПРАВЛЕНО: Убран конечный слэш
+const TTS_API_URL = '/api/tts/generate'; 
 
 const Home = () => {
   const [text, setText] = useState('');
