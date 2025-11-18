@@ -1,11 +1,10 @@
 // Файл: webapp/pages/index.js
 import { useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import dynamic from 'next/dynamic'; 
-
+import { motion, AnimatePresence } from 'framer-motion';
+import dynamic from 'next/dynamic';
 import Player from '../components/Player';
 
-// 1. ДИНАМИЧЕСКИ ИМПОРТИРУЕМ Layout, ОТКЛЮЧАЯ SSR (важно для SDK Telegram)
+// Важно: Динамический импорт Layout для корректной работы с Telegram SDK на стороне клиента
 const Layout = dynamic(() => import('../components/Layout'), { 
   ssr: false, 
   loading: () => (
@@ -15,7 +14,7 @@ const Layout = dynamic(() => import('../components/Layout'), {
   )
 });
 
-// ✅ ИСПРАВЛЕНО: Путь к API без конечного слэша
+// Путь API БЕЗ КОНЕЧНОГО СЛЭША (должен совпадать с vercel.json и index.py)
 const TTS_API_URL = '/api/tts/generate'; 
 
 const Home = () => {
@@ -23,11 +22,24 @@ const Home = () => {
   const [currentAudio, setCurrentAudio] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedVoice, setSelectedVoice] = useState('default'); 
+  const [isPlaying, setIsPlaying] = useState(false); 
+  
+  const MAX_CHARS = 5000;
 
-  const tapEffect = { scale: 0.95 };
+  const togglePlay = useCallback(() => {
+    if (currentAudio) {
+      if (isPlaying) {
+        currentAudio.pause();
+      } else {
+        currentAudio.play();
+      }
+      setIsPlaying(prev => !prev);
+    }
+  }, [currentAudio, isPlaying]);
 
   const handleTextToSpeech = useCallback(async () => {
+    setError(null);
+
     if (text.trim().length < 5) {
       setError('Введите текст длиной не менее 5 символов.');
       return;
@@ -36,10 +48,10 @@ const Home = () => {
     if (currentAudio) {
       currentAudio.pause();
       setCurrentAudio(null);
+      setIsPlaying(false);
     }
 
     setLoading(true);
-    setError(null);
 
     try {
       const response = await fetch(TTS_API_URL, {
@@ -47,81 +59,122 @@ const Home = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text, voice: selectedVoice }),
+        body: JSON.stringify({ 
+          text: text,
+          voice: 'default'
+        }),
       });
 
       if (!response.ok) {
-        // Пробуем прочитать ошибку из тела ответа для лучшего сообщения
         const errorText = await response.text();
         throw new Error(`Ошибка API (${response.status}): ${errorText.substring(0, 100)}...`);
       }
 
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
+      
+      audio.onplay = () => setIsPlaying(true);
+      audio.onpause = () => setIsPlaying(false);
+      audio.onended = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+        setCurrentAudio(null);
+      };
       
       setCurrentAudio(audio);
       audio.play();
 
     } catch (err) {
       console.error(err);
-      setError(`Не удалось сгенерировать аудио: ${err.message || 'Проверьте логи Vercel.'}`);
+      setError(err.message || 'Не удалось сгенерировать голос. Проверьте соединение.');
     } finally {
       setLoading(false);
     }
-  }, [text, currentAudio, selectedVoice]);
+  }, [text, currentAudio]);
+
 
   return (
     <Layout>
-      <div className="max-w-md mx-auto p-4">
-        {/* Заголовок */}
-        <h1 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white">
-          🎤 Текст в Речь Mini App
-        </h1>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        // max-w-xl mx-auto: центрирование, flex flex-col justify-between: прибивает плеер вниз
+        className="max-w-xl mx-auto min-h-[calc(100vh-2rem)] flex flex-col justify-between" 
+      >
+        <div className="flex-grow p-4">
+          <h1 className="text-3xl font-bold mb-4 text-center text-gray-800 dark:text-white">
+            🎙️ Голосовой Ассистент
+          </h1>
 
-        {/* Поле для текста */}
-        <textarea
-          rows="8"
-          className="w-full p-3 border rounded-xl focus:ring-blue-500 focus:border-blue-500 bg-zinc-100 dark:bg-zinc-700 dark:border-zinc-700 dark:text-white"
-          placeholder="Вставьте текст..."
-          value={text}
-          onChange={(e) => setText(e.target.value)}
+          {/* Поле ввода */}
+          <div className="relative mb-4">
+            <textarea
+              className="w-full h-40 p-4 pt-8 border-2 rounded-2xl text-lg resize-none focus:ring-blue-500 focus:border-blue-500 bg-zinc-100 dark:bg-zinc-700 dark:text-white transition-all shadow-lg focus:shadow-xl"
+              placeholder="Введите текст для озвучивания..."
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value.substring(0, MAX_CHARS));
+                setError(null);
+              }}
+            />
+            {/* Счетчик символов */}
+            <div className="absolute top-3 right-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+                {text.length} / {MAX_CHARS}
+            </div>
+          </div>
+          
+
+          {/* Индикатор Ошибки */}
+          <AnimatePresence>
+            {error && (
+                <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl dark:bg-red-900/50 dark:border-red-600 dark:text-red-300 font-medium overflow-hidden shadow-md"
+                >
+                    {error}
+                </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Кнопки действий */}
+          <div className="mt-6 flex flex-col space-y-4">
+            <motion.button
+              onClick={handleTextToSpeech}
+              whileTap={{ scale: 0.95 }}
+              disabled={loading || text.length < 5}
+              className={`w-full py-3 rounded-2xl font-bold text-lg transition-all transform tracking-wider ${
+                loading 
+                  ? 'bg-blue-400 dark:bg-blue-600 text-white cursor-not-allowed opacity-75'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xl hover:shadow-2xl'
+              }`}
+            >
+              {loading ? '🎤 Генерация...' : '🔊 Слушать Голосом'}
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              disabled={true} 
+              className="w-full py-3 rounded-2xl font-bold text-lg transition-colors bg-green-200 text-green-700 dark:bg-green-700 dark:text-green-200 cursor-not-allowed opacity-70"
+            >
+              📎 Загрузить Документ (WIP)
+            </motion.button>
+          </div>
+        </div>
+        
+        {/* Компонент Плеера */}
+        <Player
+          isPlaying={isPlaying}
+          togglePlay={togglePlay}
+          currentAudio={currentAudio}
+          loading={loading}
         />
 
-        {/* Кнопки действий */}
-        <div className="mt-4 flex flex-col space-y-3">
-          <motion.button
-            onClick={handleTextToSpeech}
-            whileTap={tapEffect}
-            disabled={loading}
-            className={`w-full py-3 rounded-xl font-semibold text-lg transition-colors ${
-              loading 
-                ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed' 
-                : 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg'
-            }`}
-          >
-            {loading ? 'Генерация...' : '🔊 Слушать Голосом'}
-          </motion.button>
-
-          <motion.button
-            whileTap={tapEffect}
-            disabled={true} 
-            className="w-full py-3 rounded-xl font-semibold text-lg transition-colors bg-green-200 text-green-700 dark:bg-green-700 dark:text-green-200 cursor-not-allowed opacity-70"
-          >
-            📎 Загрузить Документ (WIP)
-          </motion.button>
-        </div>
-      </div>
-      
-      {/* Компонент Плеера */}
-      <Player
-        isPlaying={!!currentAudio && !currentAudio.paused}
-        togglePlay={() => currentAudio?.paused ? currentAudio.play() : currentAudio?.pause()}
-        currentAudio={currentAudio}
-        loading={loading}
-        error={error}
-        voice={selectedVoice}
-      />
+      </motion.div>
     </Layout>
   );
 };
