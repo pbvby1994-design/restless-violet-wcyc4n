@@ -1,0 +1,21 @@
+{
+  "name": "nodejs-sandbox",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --watch index.js"
+  },
+  "keywords": [],
+  "author": "Ives van Hoorne",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {
+    "@twa-dev/sdk": "8.0.1",
+    "autoprefixer": "10.4.21",
+    "framer-motion": "12.23.24",
+    "postcss": "8.5.6",
+    "resolve-from": "5.0.0",
+    "tailwindcss": "4.1.17"
+  }
+}
