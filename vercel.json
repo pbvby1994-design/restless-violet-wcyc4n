@@ -12,7 +12,7 @@
     ],
     "routes": [
       {
-        "src": "/api/tts/generate/(.*)",
+        "src": "/api/tts/generate/",  <-- ИСПРАВЛЕНИЕ: Точное соответствие пути
         "dest": "api/index.py"
       },
       {
@@ -20,4 +20,4 @@
         "dest": "webapp/$1"
       }
     ]
-  }
+}
