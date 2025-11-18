@@ -10,4 +10,5 @@ body {
   color: var(--tg-theme-text-color, #18181b); 
   transition: background-color 0.3s, color 0.3s;
   min-height: 100vh; /* Важно для Web App */
+
 }
