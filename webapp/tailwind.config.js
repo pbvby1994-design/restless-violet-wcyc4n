@@ -1,52 +1,42 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./pages/**/*.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+ 
+    // Or if using `src` directory:
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
       colors: {
-        // Основной фон - Глубокий космос
-        bg: {
-          DEFAULT: '#0B0F15', 
-          card: 'rgba(255, 255, 255, 0.03)', // Стекло для карточек
-          glass: 'rgba(255, 255, 255, 0.04)',
-        },
-        // Текст
-        txt: {
-          primary: '#FFFFFF',
-          secondary: '#9EA8B7',
-          muted: '#5E6470',
-        },
-        // Фиолетовый неон (Акцентный цвет)
-        accent: {
-          light: '#A46CFF',
-          DEFAULT: '#8850FF', 
-          deep: '#2D166F',
-          neon: '#B06EFF',
-        },
-      },
-      fontFamily: {
-        sans: ['Inter', 'sans-serif'], // Современный шрифт
-        serif: ['Georgia', 'serif'], 
+        // Цвета, адаптированные для темной темы и WebApp
+        'bg-default': '#0B0F15', // Темный фон
+        'bg-card': 'rgba(255, 255, 255, 0.03)', // Для карточек (стеклянный эффект)
+        'bg-glass': 'rgba(255, 255, 255, 0.04)', // Для инпутов
+        'txt-primary': '#FFFFFF', // Основной текст
+        'txt-secondary': '#9EA8B7', // Второстепенный текст/подсказки
+        'txt-muted': '#5E6470', // Мутированный текст
+        'accent-neon': '#B06EFF', // Неоновый акцент
+        'accent-light': '#A46CFF', // Акцент для эффекта hover
       },
       boxShadow: {
-        'neon': '0 0 25px rgba(136, 80, 255, 0.3)',
-        'card': '0 4px 20px rgba(0, 0, 0, 0.4)',
+        // Неоновая тень для кнопок
+        'neon': '0 0 15px rgba(136, 80, 255, 0.4)',
+        // Тень для карточек
+        'card': '0 4px 12px rgba(0, 0, 0, 0.2)',
       },
-      animation: {
-        'wave': 'wave 1.5s ease-in-out infinite', // Анимация эквалайзера
+      fontFamily: {
+        // Используем Inter по умолчанию
+        sans: ['Inter', 'sans-serif'],
       },
-      keyframes: {
-        wave: {
-          '0%, 100%': { height: '20%' },
-          '50%': { height: '100%' },
-        }
+      // Добавляем задержки для анимации (например, для лоадеров)
+      animationDelay: {
+        '200': '200ms',
+        '400': '400ms',
       }
     },
   },
-  plugins: [
-    require('@tailwindcss/forms'),
-  ],
+  plugins: [],
 }
