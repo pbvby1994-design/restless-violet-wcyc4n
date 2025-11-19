@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { usePlayer } from '../context/PlayerContext';
+import { motion } from "framer-motion";
 
 // Динамический импорт Layout для избежания SSR ошибок с Telegram SDK
 const Layout = dynamic(() => import('../components/Layout'), { 
