@@ -1,41 +1,61 @@
+// Файл: webapp/components/Layout.js
 import { useEffect, useState } from 'react';
-import { PlayerProvider } from '../context/PlayerContext'; // Импорт провайдера
-import WebApp from '@twa-dev/sdk';
+import { init } from '@twa-dev/sdk'; 
+import { PlayerProvider } from '../context/PlayerContext';
 
-// Этот компонент теперь служит оберткой для всего приложения
 const Layout = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
+  const [isSdkInitialized, setIsSdkInitialized] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && WebApp.ready) {
-        try {
-            WebApp.ready(); 
-            WebApp.expand(); // Раскрываем на весь экран сразу
-            
-            // Устанавливаем черный хедер для соответствия дизайну
-            WebApp.setHeaderColor('#0C0C0F'); 
-            WebApp.setBackgroundColor('#0C0C0F');
+    let tg;
+    try {
+      // 1. Инициализация SDK
+      init(); 
+      tg = window.Telegram.WebApp; 
+      
+      // 2. Настройка UI:
+      // Устанавливаем основной цвет
+      document.body.style.backgroundColor = tg.themeParams.bg_color || '#1e1e2d';
+      
+      // Включаем виброотклик при нажатии
+      tg.HapticFeedback.impactOccurred('light');
 
-            setIsReady(true);
-        } catch (e) {
-            console.error("Telegram WebApp Init Error", e);
-            setIsReady(true);
-        }
-    } else {
-        setIsReady(true);
+      // Устанавливаем цвет кнопки (MainButton)
+      tg.MainButton.setParams({
+        text_color: tg.themeParams.button_text_color || '#ffffff',
+        color: tg.themeParams.button_color || '#8850ff',
+      });
+
+      // Скрываем навигационную кнопку "назад"
+      tg.BackButton.hide();
+
+      setIsSdkInitialized(true);
+    } catch (e) {
+      // Если это не Telegram, или ошибка инициализации
+      console.error("Telegram WebApp SDK failed to initialize:", e.message);
+      setIsSdkInitialized(true); // Все равно продолжаем работу
+    } finally {
+      setIsReady(true);
     }
   }, []);
 
   if (!isReady) {
-    return <div className="bg-[#0C0C0F] h-screen w-screen" />;
+    return (
+      <div className="flex justify-center items-center h-screen text-lg bg-bg-default text-txt-primary">
+        Загрузка приложения...
+      </div>
+    );
   }
 
-  // Оборачиваем все в PlayerProvider
+  // Обновляем корневой элемент для соответствия стилям Tailwind
   return (
     <PlayerProvider>
-      <main className="min-h-screen bg-[#0C0C0F] text-white font-sans selection:bg-brand-accent selection:text-white overflow-hidden">
-        {children}
-      </main>
+      <div className="min-h-screen p-4 flex flex-col items-center bg-bg-default transition-colors duration-300">
+        <div className="w-full max-w-lg">
+          {children}
+        </div>
+      </div>
     </PlayerProvider>
   );
 };
