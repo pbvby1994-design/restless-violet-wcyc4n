@@ -1,9 +1,15 @@
 // Файл: webapp/next.config.js
 // Используем require/module.exports для лучшей совместимости с Webpack в Next.js
-// const path = require('path'); // Больше не нужен, если нет кастомных алиасов
+const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // --- ДОБАВЛЕНО: ВАЖНОЕ ИЗМЕНЕНИЕ ДЛЯ VERCEL ---
+  // Включаем режим standalone, чтобы Vercel автоматически настроил маршрутизацию
+  // для Next.js приложения, расположенного в подпапке.
+  output: 'standalone', 
+  // ----------------------------------------------
+
   // Отключение Strict Mode для подавления дублирования useEffect в Dev-режиме
   reactStrictMode: false, 
 
@@ -15,13 +21,16 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // *** КОНФИГУРАЦИЯ WEBPACK УПРОЩЕНА ***
-  // Next.js по умолчанию отлично обрабатывает модули и лоадеры.
-  // Мы удаляем кастомные настройки, которые могли конфликтовать с internal error-loader.
+  // *** ЯВНАЯ НАСТРОЙКА WEBPACK ДЛЯ АЛИАСОВ ПУТИ ***
   webpack: (config, { isServer }) => {
-    // Если вам нужен алиас `@`, его лучше настроить через jsconfig.json, 
-    // но для простоты мы просто полагаемся на стандартные импорты.
+    // 1. Устанавливаем алиас `@/` на корневую папку приложения (`webapp/`)
+    // Это гарантирует, что импорты вида `@/styles/globals.css` будут работать.
+    config.resolve.alias['@/'] = path.join(__dirname, './');
     
+    // 2. Указываем Webpack, чтобы он искал модули в node_modules, 
+    // чтобы избежать проблем с относительными импортами.
+    config.resolve.modules.push(path.resolve('./node_modules'));
+
     // Всегда возвращать обновленную конфигурацию
     return config;
   },
