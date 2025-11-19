@@ -1,6 +1,6 @@
 // Файл: webapp/components/Layout.js
 import { useEffect, useState } from 'react';
-import { init } from '@twa-dev/sdk'; 
+import WebApp from '@twa-dev/sdk';  // Измените импорт на default (для типов, если используете TS)
 import { PlayerProvider } from '../context/PlayerContext';
 
 const Layout = ({ children }) => {
@@ -10,33 +10,26 @@ const Layout = ({ children }) => {
   useEffect(() => {
     let tg;
     try {
-      // 1. Инициализация SDK
-      init(); 
-      tg = window.Telegram.WebApp; 
+      // Удалите init(); — оно не нужно и не экспортируется
+      tg = window.Telegram.WebApp;  // Или tg = WebApp; для использования импорта
       
-      // 2. Настройка UI:
-      // Устанавливаем основной цвет
-      document.body.style.backgroundColor = tg.themeParams.bg_color || '#1e1e2d';
-      
-      // Включаем виброотклик при нажатии
-      tg.HapticFeedback.impactOccurred('light');
+      // Добавьте это для правильной инициализации
+      tg.ready();
 
-      // Устанавливаем цвет кнопки (MainButton)
+      // Остальной код без изменений
+      document.body.style.backgroundColor = tg.themeParams.bg_color || '#1e1e2d';
+      tg.HapticFeedback.impactOccurred('light');
       tg.MainButton.setParams({
         text_color: tg.themeParams.button_text_color || '#ffffff',
         color: tg.themeParams.button_color || '#8850ff',
       });
-
-      // Скрываем навигационную кнопку "назад"
       tg.BackButton.hide();
 
       setIsSdkInitialized(true);
     } catch (e) {
-      // Если это не Telegram, или ошибка инициализации
       console.error("Telegram WebApp SDK failed to initialize:", e.message);
       setIsSdkInitialized(true); // Все равно продолжаем работу
     } finally {
-      // Это нужно, чтобы контент не рендерился, пока не завершится useEffect
       setIsReady(true);
     }
   }, []);
@@ -49,14 +42,12 @@ const Layout = ({ children }) => {
     );
   }
 
-  // Обновляем корневой элемент для соответствия стилям Tailwind
   return (
-    // PlayerProvider теперь внутри Layout
-    <PlayerProvider>
-      <div className="min-h-screen max-w-md mx-auto relative overflow-hidden pb-32">
+    <div className="min-h-screen p-4 flex flex-col items-center bg-bg-default transition-colors duration-300">
+      <div className="w-full max-w-lg">
         {children}
       </div>
-    </PlayerProvider>
+    </div>
   );
 };
 
