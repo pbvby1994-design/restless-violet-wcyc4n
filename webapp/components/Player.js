@@ -1,10 +1,13 @@
-// Файл: webapp/components/Player.js
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Settings, Volume2, FastForward, Rewind } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Settings, Volume2, Maximize2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { useState } from 'react';
 
-// Утилита для форматирования времени (секунды -> "М:СС")
+/**
+ * Утилита для форматирования времени (секунды -> "М:СС")
+ * @param {number} time - Время в секундах
+ * @returns {string} Отформатированное время
+ */
 const formatTime = (time) => {
   if (!time || isNaN(time) || time < 0) return "0:00";
   const minutes = Math.floor(time / 60);
@@ -13,10 +16,12 @@ const formatTime = (time) => {
 };
 
 /**
- * Компонент управления аудио плеером.
- * Он использует контекст usePlayer для доступа к состоянию аудио и функциям управления.
+ * Компонент управления аудиоплеером.
+ * Фиксирован в нижней части экрана и видим только при наличии currentAudioUrl.
+ * @param {object} props - Свойства компонента.
+ * @param {string} props.voice - Имя текущего выбранного голоса для отображения.
  */
-export default function PlayerControl() {
+export default function PlayerControl({ voice }) {
   const { 
     currentAudioUrl, 
     isPlaying, 
@@ -24,157 +29,168 @@ export default function PlayerControl() {
     currentTime, 
     duration, 
     seekTo,
-    isLoading // Показываем анимацию загрузки, пока нет аудио
+    isLoading
   } = usePlayer();
   
   const [showSettings, setShowSettings] = useState(false);
 
-  // Эффект нажатия
-  const tapEffect = { scale: 0.95 };
-
-  // Если нет аудио URL и нет активной загрузки, плеер скрыт
+  // Плеер виден только если есть аудио или идет загрузка
   if (!currentAudioUrl && !isLoading) {
     return null;
-  }
-  
-  // Если идет загрузка, показываем стилизованный эквалайзер
-  if (isLoading) {
-    return (
-      <div className="card-glass flex items-center justify-center h-28">
-        <div className="flex items-end h-10 w-24">
-          <div className="bar"></div>
-          <div className="bar"></div>
-          <div className="bar"></div>
-          <div className="bar"></div>
-          <div className="bar"></div>
-        </div>
-        <span className="ml-4 text-txt-secondary text-sm">Подготовка аудио...</span>
-      </div>
-    );
   }
 
   // Вычисление прогресса в процентах
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   
-  // Обработчик изменения ползунка прогресса
-  const handleSeek = (e) => {
-    const newTime = parseFloat(e.target.value);
-    seekTo(newTime);
+  // Эффект нажатия
+  const tapEffect = { scale: 0.95 };
+
+  // --- ОБРАБОТЧИКИ СОБЫТИЙ ДЛЯ ПОЛЗУНКА ---
+
+  // Когда пользователь начинает перетаскивать ползунок
+  const handleSeekStart = (e) => {
+    // В будущем тут можно было бы остановить автоматическое обновление currentTime
   };
-  
-  // Обработчики быстрой перемотки
-  const skipTime = 5; // 5 секунд
-  const skipForward = () => seekTo(Math.min(currentTime + skipTime, duration));
-  const skipBack = () => seekTo(Math.max(currentTime - skipTime, 0));
+
+  // Когда пользователь перемещает ползунок (обновляет отображаемое время)
+  const handleSeekChange = (e) => {
+    const time = parseFloat(e.target.value);
+    // Для более плавного обновления, можно обновлять только локальное состояние 
+    // во время перетаскивания, но для простоты мы сразу передаем в контекст.
+    seekTo(time);
+  };
+
+  // Когда пользователь отпускает ползунок
+  const handleSeekEnd = (e) => {
+    const time = parseFloat(e.target.value);
+    seekTo(time); // Убедимся, что финальная позиция применена
+  };
+
 
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        className="card-glass w-full"
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
+        exit={{ y: 100 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-6 pt-2"
       >
-        <div className="space-y-4">
+        <div className="mx-auto max-w-md bg-bg-glass backdrop-blur-xl border border-white/10 rounded-3xl shadow-neon/30 p-4 transition-all duration-300">
           
-          {/* 1. Progress Bar and Time */}
-          <div className="w-full">
-            <input 
+          {/* Верхняя часть: Название и Настройки */}
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-semibold text-accent-neon truncate">
+              {isLoading ? 'Генерация...' : `Аудио Голосом: ${voice}`}
+            </h3>
+            
+            {/* Кнопка Настроек */}
+            <motion.button
+              onClick={() => setShowSettings(!showSettings)}
+              whileTap={tapEffect}
+              className={`p-1 rounded-full transition-all duration-300 ${
+                showSettings ? 'bg-accent-deep text-accent-neon' : 'text-txt-secondary hover:text-txt-primary'
+              }`}
+            >
+              <Settings size={18} className={showSettings ? 'rotate-90' : ''}/>
+            </motion.button>
+          </div>
+          
+          {/* Ползунок Прогресса */}
+          <div className="relative mb-2">
+            <input
               type="range"
               min="0"
-              max={duration}
+              max={duration || 0}
               step="0.1"
               value={currentTime}
-              onChange={handleSeek}
-              className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent"
+              onChange={handleSeekChange}
+              onMouseDown={handleSeekStart}
+              onTouchStart={handleSeekStart}
+              onMouseUp={handleSeekEnd}
+              onTouchEnd={handleSeekEnd}
+              className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent-neon/80"
               style={{
-                background: `linear-gradient(to right, var(--color-accent-default) 0%, var(--color-accent-default) ${progressPercent}%, rgba(255, 255, 255, 0.1) ${progressPercent}%, rgba(255, 255, 255, 0.1) 100%)`
+                background: `linear-gradient(to right, var(--tw-colors-accent-neon) ${progressPercent}%, #ffffff1a ${progressPercent}%)`
               }}
+              disabled={!currentAudioUrl}
             />
-            <div className="flex justify-between text-xs font-mono mt-1 text-txt-secondary">
+            {/* Отображение времени */}
+            <div className="flex justify-between text-xs text-txt-muted mt-1">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
 
-          {/* 2. Controls */}
-          <div className="flex justify-center items-center space-x-6">
-            {/* Настройки (пока неактивно) */}
-            <motion.button 
-              onClick={() => setShowSettings(!showSettings)}
-              whileTap={tapEffect}
-              className={`p-2 rounded-full transition-colors ${
-                showSettings ? 'bg-accent/20 text-accent-neon' : 'text-txt-muted hover:text-txt-primary'
-              }`}
-            >
-              <Settings size={24} />
-            </motion.button>
+          {/* Элементы управления воспроизведением */}
+          <div className="flex items-center justify-center space-x-6 mt-4">
             
-            {/* Назад на 5 сек */}
-            <motion.button 
-              onClick={skipBack}
+            {/* Кнопка Skip Back (Перемотка назад на 10 сек) */}
+            <motion.button
+              onClick={() => seekTo(currentTime - 10)}
               whileTap={tapEffect}
-              className="text-txt-primary hover:text-accent transition-colors"
+              disabled={!currentAudioUrl || isLoading}
+              className="text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-30"
             >
-              <Rewind size={32} />
+              <SkipBack size={24} />
             </motion.button>
 
-            {/* Play/Pause */}
-            <motion.button 
+            {/* Главная Кнопка Play/Pause */}
+            <motion.button
               onClick={togglePlay}
               whileTap={{ scale: 0.9 }}
-              className="bg-accent text-white p-3 rounded-full shadow-lg shadow-accent/50 hover:bg-accent-light transition-all"
+              disabled={!currentAudioUrl || isLoading}
+              className="w-14 h-14 bg-accent-neon rounded-full flex items-center justify-center shadow-lg shadow-accent-neon/50 hover:bg-accent-light transition-colors disabled:opacity-50"
             >
-              {isPlaying ? <Pause size={32} fill="white" /> : <Play size={32} fill="white" className="translate-x-[2px]" />}
-            </motion.button>
-
-            {/* Вперед на 5 сек */}
-            <motion.button 
-              onClick={skipForward}
-              whileTap={tapEffect}
-              className="text-txt-primary hover:text-accent transition-colors"
-            >
-              <FastForward size={32} />
+              {isLoading ? (
+                <div className="w-5 h-5 border-2 border-t-white border-white/50 rounded-full animate-spin"></div>
+              ) : isPlaying ? (
+                <Pause size={28} fill="white" className="text-white ml-0.5" />
+              ) : (
+                <Play size={28} fill="white" className="text-white ml-1.5" />
+              )}
             </motion.button>
             
-            {/* Громкость (пока неактивно) */}
-            <motion.button 
+            {/* Кнопка Skip Forward (Перемотка вперед на 10 сек) */}
+            <motion.button
+              onClick={() => seekTo(currentTime + 10)}
               whileTap={tapEffect}
-              className="p-2 rounded-full text-txt-muted hover:text-txt-primary transition-colors"
-              disabled
+              disabled={!currentAudioUrl || isLoading}
+              className="text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-30"
             >
-              <Volume2 size={24} />
+              <SkipForward size={24} />
             </motion.button>
           </div>
-          
-          {/* 3. Settings Dropdown */}
+
+          {/* Панель Настроек (выдвигается) */}
           <AnimatePresence>
             {showSettings && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden pt-4 border-t border-white/10"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden pt-4 mt-4 border-t border-white/10 space-y-3"
               >
-                <div className="space-y-4">
-                  {/* Скорость */}
+                <div className="space-y-3">
+                  {/* Скорость Воспроизведения (Заглушка) */}
                   <label className="block">
                     <span className="text-sm font-medium text-txt-secondary flex justify-between">
-                       Скорость: 1.0x
+                       Скорость: <span>1.0x</span> 
                     </span>
                     <input type="range" min="0.5" max="2.0" step="0.1" defaultValue="1.0" 
-                           className="mt-1 w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent" 
+                           className="mt-1 w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent-neon/80" 
                            disabled // Логика скорости пока не реализована в PlayerContext
                     />
                   </label>
                   
-                  {/* Громкость */}
+                  {/* Громкость (Заглушка) */}
                   <label className="block">
                     <span className="text-sm font-medium text-txt-secondary flex justify-between">
-                       Громкость: 100% <Volume2 size={16}/>
+                       Громкость: <Volume2 size={16}/>
                     </span>
                     <input type="range" min="0" max="1" step="0.1" defaultValue="1.0" 
-                           className="mt-1 w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent"
+                           className="mt-1 w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent-neon/80"
                            disabled // Логика громкости пока не реализована в PlayerContext
                     />
                   </label>
