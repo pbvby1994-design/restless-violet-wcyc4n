@@ -1,151 +1,92 @@
-// Файл: webapp/context/PlayerContext.js
-import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useRef, useEffect } from 'react';
 
-// 1. Создание контекста
 const PlayerContext = createContext();
 
-// 2. Пользовательский хук для использования контекста
-export const usePlayer = () => useContext(PlayerContext);
-
-// 3. Компонент провайдера
 export const PlayerProvider = ({ children }) => {
-  // Состояние аудио
-  const [currentAudioUrl, setCurrentAudioUrl] = useState(null); // URL текущего аудиофайла
-  const [isPlaying, setIsPlaying] = useState(false);             // Статус воспроизведения
-  const [isLoading, setIsLoading] = useState(false);             // Статус загрузки/генерации
-  const [error, setError] = useState(null);                      // Сообщение об ошибке
-  const [duration, setDuration] = useState(0);                   // Общая длительность
-  const [currentTime, setCurrentTime] = useState(0);             // Текущая позиция
-
-  // Ссылка на объект Audio, чтобы управлять воспроизведением
+  // Состояние плеера
+  const [currentTrack, setCurrentTrack] = useState(null); 
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0); // 0 to 100
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+  
+  // Аудио элемент
   const audioRef = useRef(null);
 
-  /**
-   * Инициализация нового аудиофайла и запуск его воспроизведения.
-   * @param {string} url - URL аудиофайла (Blob URL или API URL).
-   */
-  const setAudioUrl = useCallback((url) => {
-    // 1. Очистка предыдущего аудио
+  // Запуск трека (текста)
+  const playTrack = (track, audioUrl) => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = '';
-      // Освобождаем память, если это был Blob URL
-      if (currentAudioUrl && currentAudioUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(currentAudioUrl);
-      }
-      audioRef.current = null;
     }
-
-    // 2. Установка нового URL и состояния
-    setCurrentAudioUrl(url);
-    setIsLoading(false); // Загрузка завершена, если мы получили URL
-    setError(null);
-
-    // 3. Создание нового объекта Audio
-    const audio = new Audio(url);
+    
+    const audio = new Audio(audioUrl);
+    audio.playbackRate = playbackRate;
     audioRef.current = audio;
+    
+    setCurrentTrack(track);
+    setIsPlaying(true);
 
-    // 4. Настройка слушателей событий
-    audio.onloadedmetadata = () => {
-      setDuration(audio.duration);
-      setCurrentTime(0);
-      // Автоматический запуск воспроизведения
-      audio.play().then(() => {
-        setIsPlaying(true);
-      }).catch(e => {
-        console.error("Audio playback failed:", e);
-        setError("Ошибка воспроизведения. Проверьте настройки браузера.");
-        setIsPlaying(false);
-      });
-    };
-
-    audio.ontimeupdate = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
+    // Подписки на события
+    audio.onplay = () => setIsPlaying(true);
+    audio.onpause = () => setIsPlaying(false);
     audio.onended = () => {
       setIsPlaying(false);
-      setCurrentTime(0);
+      setProgress(100);
     };
-
-    audio.onerror = (e) => {
-      console.error("Audio error:", e);
-      setError("Произошла ошибка при загрузке аудио.");
-      setIsPlaying(false);
-      setIsLoading(false);
+    audio.ontimeupdate = () => {
+      setCurrentTime(audio.currentTime);
+      setDuration(audio.duration || 0);
+      if (audio.duration) {
+        setProgress((audio.currentTime / audio.duration) * 100);
+      }
     };
+    
+    audio.play();
+  };
 
-  }, [currentAudioUrl]); // currentAudioUrl добавлен для корректного revokeObjectURL
-
-  /**
-   * Переключение состояния воспроизведения (Пауза/Воспроизведение)
-   */
-  const togglePlay = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play().catch(e => {
-        console.error("Play failed after pause:", e);
-        setError("Ошибка воспроизведения.");
-      });
-    }
-    setIsPlaying(prev => !prev);
-  }, [isPlaying]);
-
-  /**
-   * Установка новой позиции воспроизведения
-   * @param {number} time - Новая позиция в секундах
-   */
-  const seekTo = useCallback((time) => {
-    const audio = audioRef.current;
-    if (audio && isFinite(time) && time >= 0 && time <= duration) {
-      audio.currentTime = time;
-      setCurrentTime(time);
-    }
-  }, [duration]);
-
-  /**
-   * Сброс всех состояний плеера (например, при очистке формы)
-   */
-  const resetPlayer = useCallback(() => {
+  const togglePlay = () => {
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-      audioRef.current = null;
+      if (isPlaying) audioRef.current.pause();
+      else audioRef.current.play();
     }
-    if (currentAudioUrl && currentAudioUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(currentAudioUrl); // Освобождаем Blob URL
-    }
-    setCurrentAudioUrl(null);
-    setIsPlaying(false);
-    setIsLoading(false);
-    setError(null);
-    setDuration(0);
-    setCurrentTime(0);
-  }, [currentAudioUrl]); // currentAudioUrl добавлен для корректного revokeObjectURL
+  };
 
-  // Объект контекста, который будет передан дочерним элементам
-  const contextValue = {
-    currentAudioUrl,
-    isPlaying,
-    isLoading,
-    error,
-    duration,
-    currentTime,
-    setIsLoading, // Позволяет компоненту Home устанавливать загрузку
-    setError,     // Позволяет компоненту Home устанавливать ошибку
-    setAudioUrl,  // Запускает воспроизведение нового аудио
-    togglePlay,   // Переключает Пауза/Воспроизведение
-    seekTo,       // Перематывает аудио
-    resetPlayer,  // Сброс
+  const seek = (percent) => {
+    if (audioRef.current && duration) {
+      const newTime = (percent / 100) * duration;
+      audioRef.current.currentTime = newTime;
+      setProgress(percent);
+    }
+  };
+
+  const changeSpeed = () => {
+    const speeds = [1.0, 1.25, 1.5, 2.0, 0.8];
+    const currentIndex = speeds.indexOf(playbackRate);
+    const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
+    
+    setPlaybackRate(nextSpeed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextSpeed;
+    }
   };
 
   return (
-    <PlayerContext.Provider value={contextValue}>
+    <PlayerContext.Provider value={{
+      currentTrack,
+      isPlaying,
+      progress,
+      currentTime,
+      duration,
+      playbackRate,
+      playTrack,
+      togglePlay,
+      seek,
+      changeSpeed
+    }}>
       {children}
     </PlayerContext.Provider>
   );
 };
+
+export const usePlayer = () => useContext(PlayerContext);
