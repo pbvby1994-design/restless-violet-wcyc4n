@@ -1,56 +1,42 @@
-// Файл: webapp/components/Layout.js
 import { useEffect, useState } from 'react';
-// ❌ Исходный код: import { init } from '@twa-dev/sdk';
-// ✅ ИСПРАВЛЕНИЕ: Импортируем весь SDK как объект WebApp
+import { PlayerProvider } from '../context/PlayerContext'; // Импорт провайдера
 import WebApp from '@twa-dev/sdk';
 
+// Этот компонент теперь служит оберткой для всего приложения
 const Layout = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Добавляем проверку, чтобы код не падал в обычном браузере (вне Telegram)
-    if (WebApp.ready) { 
+    if (typeof window !== 'undefined' && WebApp.ready) {
         try {
-            // ✅ ИСПРАВЛЕНИЕ: Используем WebApp.ready() вместо init()
             WebApp.ready(); 
-            const tg = WebApp; // Теперь tg — это объект SDK
-
-            // Настройка цвета фона (используем цвета, предоставленные Telegram)
-            if (tg.themeParams && tg.themeParams.bg_color) {
-                document.body.style.backgroundColor = tg.themeParams.bg_color;
-            } else {
-                document.body.style.backgroundColor = '#f4f4f5'; // Fallback
-            }
+            WebApp.expand(); // Раскрываем на весь экран сразу
             
-            // Включаем виброотклик
-            tg.HapticFeedback.impactOccurred('light');
+            // Устанавливаем черный хедер для соответствия дизайну
+            WebApp.setHeaderColor('#0C0C0F'); 
+            WebApp.setBackgroundColor('#0C0C0F');
 
             setIsReady(true);
         } catch (e) {
-            // Выводим ошибку, но продолжаем, чтобы можно было тестировать в браузере
-            console.error("Telegram WebApp SDK failed to initialize:", e);
+            console.error("Telegram WebApp Init Error", e);
             setIsReady(true);
         }
     } else {
-        // Запуск в обычном браузере (вне Telegram)
-        console.warn("Telegram WebApp SDK not found. Running in standard browser mode.");
         setIsReady(true);
     }
   }, []);
 
   if (!isReady) {
-    return (
-      <div className="flex justify-center items-center h-screen text-lg bg-zinc-100 dark:bg-zinc-800">
-        Загрузка приложения...
-      </div>
-    );
+    return <div className="bg-[#0C0C0F] h-screen w-screen" />;
   }
 
+  // Оборачиваем все в PlayerProvider
   return (
-    // Добавляем классы dark: для поддержки темной темы Telegram
-    <div className="min-h-screen p-4 bg-zinc-50 dark:bg-zinc-900 transition-colors duration-300">
-      {children}
-    </div>
+    <PlayerProvider>
+      <main className="min-h-screen bg-[#0C0C0F] text-white font-sans selection:bg-brand-accent selection:text-white overflow-hidden">
+        {children}
+      </main>
+    </PlayerProvider>
   );
 };
 
