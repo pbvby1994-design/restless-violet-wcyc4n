@@ -1,109 +1,51 @@
-// Файл: lib/firebase.js
+// lib/firebase.js
+// STUB — временная заглушка, безопасна для server-side сборки и для разработки.
+// Экспортирует минимальный набор функций, которые ожидает приложение.
+// Когда настроишь Firebase — заменишь это на реальную реализацию.
 
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  collection, 
-  onSnapshot, 
-  query, 
-  where, 
-  updateDoc, 
-  deleteDoc, 
-  serverTimestamp, 
-  getDocs, // <-- Теперь импортирован корректно
-  addDoc // <-- Добавлено для полноты
-} from 'firebase/firestore';
+const isClient = typeof window !== 'undefined';
 
-// Глобальные переменные, предоставляемые средой Canvas
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : { /* Вставьте заглушку конфигурации, если нужно для локального запуска */ };
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' 
-  ? __initial_auth_token 
-  : null;
-
-// Инициализация Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-let currentUserId = null;
-let isAuthReady = false;
-
-// Асинхронная функция для инициализации аутентификации
-async function initializeAuth() {
-  return new Promise(async (resolve) => {
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        currentUserId = user.uid;
-      } else {
-        // Если токен есть, но onAuthStateChanged не вернул пользователя (редко, но возможно), 
-        // пробуем войти по токену.
-        if (initialAuthToken) {
-          try {
-            const userCredential = await signInWithCustomToken(auth, initialAuthToken);
-            currentUserId = userCredential.user.uid;
-          } catch (error) {
-            console.error("Error signing in with custom token:", error);
-            // Если токен не сработал, или его нет, входим анонимно
-            await signInAnonymously(auth);
-            currentUserId = auth.currentUser?.uid || crypto.randomUUID();
-          }
-        } else {
-          // Если токена нет, входим анонимно
-          await signInAnonymously(auth);
-          currentUserId = auth.currentUser?.uid || crypto.randomUUID();
-        }
-      }
-      isAuthReady = true;
-      console.log(`Firebase initialized. User ID: ${currentUserId}`);
-      resolve(currentUserId);
-    });
-    
-    // Начальная попытка входа по токену, если onAuthStateChanged еще не сработал
-    if (!auth.currentUser && initialAuthToken) {
-        try {
-            await signInWithCustomToken(auth, initialAuthToken);
-        } catch (error) {
-            // Если custom token не сработал, onAuthStateChanged обработает анонимный вход
-            console.warn("Custom token initial sign-in failed, relying on onAuthStateChanged or anonymous sign-in.", error);
-        }
-    } else if (!auth.currentUser) {
-        // Запускаем анонимный вход, если нет токена
-        await signInAnonymously(auth);
-    }
-  });
+function notInitializedWarning(name) {
+  return () => {
+    console.warn(`[firebase-stub] called ${name} — Firebase не настроен. Возвращаю заглушку.`);
+    // для getDocs/запросов возвращаем пустой результат/промис
+    if (name === 'getDocs' || name === 'fetchCollection') return Promise.resolve([]);
+    return Promise.resolve(null);
+  };
 }
 
-// Запускаем инициализацию аутентификации
-initializeAuth();
+// Экспортируем "имена", которые использует проект.
+// Подстрой под то, что реально импортируешь в коде.
+export const db = null;
+export const auth = null;
+export const getPrivateCollectionPath = () => null;
+export const currentUserId = () => null;
 
-
-/**
- * Возвращает путь к личной коллекции пользователя.
- * @param {string} collectionName - Название коллекции (например, 'books').
- * @returns {string} Полный путь к коллекции.
- */
-const getPrivateCollectionPath = (collectionName) => {
-  if (!currentUserId) {
-    console.warn("Attempted to access collection before user ID was set. Using placeholder.");
-    return `artifacts/${appId}/users/placeholder-user/${collectionName}`;
-  }
-  return `artifacts/${appId}/users/${currentUserId}/${collectionName}`;
+// Функции Firestore-API (заглушки)
+export const doc = () => null;
+export const setDoc = notInitializedWarning('setDoc');
+export const collection = () => null;
+export const onSnapshot = () => {
+  // возвращаем функцию отписки
+  return () => {};
 };
+export const query = () => null;
+export const where = () => null;
+export const updateDoc = notInitializedWarning('updateDoc');
+export const deleteDoc = notInitializedWarning('deleteDoc');
+export const serverTimestamp = () => new Date();
+export const getDocs = notInitializedWarning('getDocs');
 
+// Доп. хелперы
+export async function fetchCollection(collectionPath) {
+  console.warn(`[firebase-stub] fetchCollection(${collectionPath}) — Firebase не настроен.`);
+  return [];
+}
 
-// Экспортируем основные объекты и функции
-export { db, auth, getPrivateCollectionPath, currentUserId, isAuthReady };
-
-// Экспортируем все необходимые функции Firestore
-export { doc, setDoc, collection, onSnapshot, query, where, updateDoc, deleteDoc, serverTimestamp, getDocs, addDoc };
+// Если хочешь — возможность динамически включать реальную инициализацию на клиенте:
+// (например, когда в дальнейшем будешь хранить конфиг в localStorage или получать от сервера)
+export async function initializeFirebaseIfAvailable() {
+  if (!isClient) return;
+  // noop for stub
+  console.warn('[firebase-stub] initializeFirebaseIfAvailable called — заглушка.');
+}
