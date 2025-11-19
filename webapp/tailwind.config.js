@@ -1,35 +1,48 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: 'class', // Включаем ручное переключение темы
   content: [
     "./pages/**/*.{js,ts,jsx,tsx}",
     "./components/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'], // Премиальный шрифт
-      },
       colors: {
-        // Палитра "Cosmic Dark" (как на референсе)
-        dark: {
-          bg: '#0C0C0F',       // Глубокий фон
-          card: '#1C1C1E',     // Карточки
-          surface: '#111217',  // Поверхности
+        // Основной фон - Глубокий космос
+        bg: {
+          DEFAULT: '#0B0F15', 
+          card: 'rgba(255, 255, 255, 0.03)', // Стекло для карточек
+          glass: 'rgba(255, 255, 255, 0.04)',
         },
-        // Акцентные цвета (Neon/Blurple)
-        brand: {
-          primary: '#4B56F0',
-          accent: '#6A5BFF',
-          glow: '#00D2FF',
-        }
+        // Текст
+        txt: {
+          primary: '#FFFFFF',
+          secondary: '#9EA8B7',
+          muted: '#5E6470',
+        },
+        // Фиолетовый неон (Акцентный цвет)
+        accent: {
+          light: '#A46CFF',
+          DEFAULT: '#8850FF', 
+          deep: '#2D166F',
+          neon: '#B06EFF',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'], // Современный шрифт
+        serif: ['Georgia', 'serif'], 
       },
       boxShadow: {
-        'glow': '0 0 20px rgba(106, 91, 255, 0.5)', // Неоновое свечение
-        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+        'neon': '0 0 25px rgba(136, 80, 255, 0.3)',
+        'card': '0 4px 20px rgba(0, 0, 0, 0.4)',
       },
       animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'wave': 'wave 1.5s ease-in-out infinite', // Анимация эквалайзера
+      },
+      keyframes: {
+        wave: {
+          '0%, 100%': { height: '20%' },
+          '50%': { height: '100%' },
+        }
       }
     },
   },
