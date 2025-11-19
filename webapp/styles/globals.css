@@ -1,30 +1,107 @@
+/* Файл: webapp/styles/globals.css */
+
+/* Импорт Tailwind CSS */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* 1. Base Styles for Telegram Mini App 
+  Используем переменные из Tailwind (bg-bg, text-txt-primary)
+  как запасной вариант, но стараемся использовать переменные Telegram SDK 
+  для нативной поддержки темы.
+*/
 body {
-  background-color: #0C0C0F;
-  color: #FFFFFF;
-  overscroll-behavior: none; /* Отключает "резиновый" скролл страницы */
+  /* Используем переменные Telegram: 
+    --tg-theme-bg-color для фона
+    --tg-theme-text-color для основного текста
+    Если SDK не работает, используем запасные цвета из Tailwind/CSS 
+  */
+  background-color: var(--tg-theme-bg-color, theme('colors.bg.DEFAULT'));
+  color: var(--tg-theme-text-color, theme('colors.txt.primary'));
+  
+  /* Устанавливаем шрифт Inter */
+  font-family: 'Inter', sans-serif;
+  
+  /* Убедитесь, что приложение занимает всю высоту */
+  min-height: 100vh;
+  
+  /* Плавный переход для смены темы */
+  transition: background-color 0.3s, color 0.3s;
 }
 
-/* Утилита для скрытия скроллбара, но сохранения функционала скролла */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+/* Переопределяем некоторые стили для лучшей интеграции в Telegram */
+input, textarea, button, select {
+  /* Используем цвета Telegram для инпутов, если они доступны */
+  border-color: var(--tg-theme-hint-color, theme('colors.txt.secondary'));
+  color: var(--tg-theme-text-color, theme('colors.txt.primary'));
+  
+  /* Убираем фоновый цвет по умолчанию для инпутов, чтобы лучше смотреться на фоне Telegram */
+  background-color: transparent; 
 }
 
-/* Базовые инпуты */
-input[type="range"] {
-  -webkit-appearance: none;
-  background: transparent;
+/* 2. Custom Tailwind Components/Utilities */
+
+/* Стиль для кнопок, использующих акцентный цвет (например, "Генерировать")
+  Используем переменную Telegram Main Button Color, если она доступна,
+  в противном случае - наш неоновый акцентный цвет.
+*/
+.btn-primary {
+  @apply bg-accent-neon hover:bg-accent-light text-white font-bold py-3 px-6 rounded-xl shadow-neon transition-all duration-200 ease-in-out;
+  background-color: var(--tg-theme-button-color, theme('colors.accent.neon'));
+  color: var(--tg-theme-button-text-color, theme('colors.txt.primary'));
+  box-shadow: 0 0 15px rgba(136, 80, 255, 0.4); /* Neon effect shadow */
 }
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
+
+.btn-primary:disabled {
+  @apply bg-gray-500 hover:bg-gray-500 cursor-not-allowed opacity-60 shadow-none;
+  background-color: var(--tg-theme-hint-color, theme('colors.txt.muted')) !important;
+  color: theme('colors.txt.primary') !important;
 }
-input[type="range"]:focus {
-  outline: none;
+
+/* Стиль для карточек/контейнеров с эффектом "стекла"
+*/
+.card-glass {
+  /* Используем цвет из tailwind.config.js */
+  background-color: theme('colors.bg.card'); 
+  /* Эффект матового стекла */
+  backdrop-filter: blur(8px);
+  /* Легкая граница */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  @apply rounded-xl shadow-card p-4 transition-all duration-300;
+}
+
+/* Стиль для TextArea 
+*/
+.textarea-input {
+  @apply w-full resize-none p-3 rounded-lg border-2 border-txt-muted/50 focus:border-accent-neon focus:ring-accent-neon bg-bg-glass text-txt-primary placeholder-txt-secondary transition-all duration-200;
+  background-color: var(--tg-theme-secondary-bg-color, theme('colors.bg.glass'));
+  border-color: var(--tg-theme-hint-color, theme('colors.txt.muted')) !important;
+}
+
+/* Добавляем стили для анимации эквалайзера в компоненте плеера */
+.bar {
+  @apply w-1 h-full bg-accent-neon rounded-full inline-block mx-[1px];
+  background-color: var(--tg-theme-button-color, theme('colors.accent.neon'));
+  animation: wave 1.5s ease-in-out infinite;
+}
+
+.bar:nth-child(2) {
+  animation-delay: -1.2s;
+}
+
+.bar:nth-child(3) {
+  animation-delay: -0.9s;
+}
+
+.bar:nth-child(4) {
+  animation-delay: -0.6s;
+}
+
+.bar:nth-child(5) {
+  animation-delay: -0.3s;
+}
+
+/* Дополнительно: чтобы избежать сдвигов макета, используем min-h-screen */
+#root, #__next {
+  min-height: 100vh;
 }
