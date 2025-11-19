@@ -1,39 +1,33 @@
 // Файл: webapp/pages/_app.js
-import dynamic from 'next/dynamic';
-import '../styles/globals.css';
 
-// Для аналитики на Vercel (сохраняем, если это было в предыдущей версии)
+// 1. Импорт глобальных стилей
+import '../styles/globals.css';
+// Для аналитики на Vercel (необязательно)
 import { Analytics } from "@vercel/analytics/react"; 
 
-// Динамический импорт Layout с отключенным SSR. 
-// Layout содержит PlayerProvider и логику Telegram SDK, 
-// поэтому он должен работать только на клиенте.
-const ClientLayout = dynamic(() => import('../components/Layout'), { 
-  ssr: false, 
-  loading: () => (
-    // Загрузочный экран, пока инициализируется SDK/компонент
-    <div className="flex justify-center items-center h-screen text-lg text-txt-primary bg-bg-default">
-        Инициализация WebApp...
-    </div>
-  )
-});
+// 2. Импорт контекста плеера для глобального доступа к состоянию аудио
+import { PlayerProvider } from '../context/PlayerContext';
 
 /**
  * Основной компонент приложения Next.js.
  * Обертывает все страницы (Component) и позволяет применять глобальные стили/обертки.
+ *
+ * Оборачиваем приложение в PlayerProvider здесь, чтобы контекст плеера
+ * был доступен на всех страницах и в любых компонентах.
  */
 function MyApp({ Component, pageProps }) {
-  // Весь компонент оборачивается в ClientLayout
   return (
-    <>
-      <ClientLayout>
+    // Оборачиваем все приложение в PlayerProvider
+    <PlayerProvider>
+      {/* Оборачиваем все приложение в React Fragment */}
+      <>
         {/* Основной компонент страницы */}
         <Component {...pageProps} />
-      </ClientLayout>
-      
-      {/* Интеграция Vercel Analytics */}
-      <Analytics />
-    </>
+        
+        {/* Интеграция Vercel Analytics */}
+        <Analytics />
+      </>
+    </PlayerProvider>
   );
 }
 
