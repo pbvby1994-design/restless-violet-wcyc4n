@@ -1,5 +1,4 @@
-// Файл: webapp/context/PlayerContext.js
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 
 // 1. Создание контекста
 const PlayerContext = createContext();
@@ -16,124 +15,120 @@ export const PlayerProvider = ({ children }) => {
   const [error, setError] = useState(null);                      // Сообщение об ошибке
   const [duration, setDuration] = useState(0);                   // Общая длительность
   const [currentTime, setCurrentTime] = useState(0);             // Текущая позиция
+  const [playbackRate, setPlaybackRateState] = useState(1.0);    // Скорость воспроизведения (1.0 = нормальная)
+  const [volume, setVolumeState] = useState(1.0);                // Громкость (1.0 = 100%)
 
   // Ссылка на объект Audio, чтобы управлять воспроизведением
   const audioRef = useRef(null);
-
-  /**
-   * Устанавливает слушателей событий для аудиоэлемента
-   */
-  useEffect(() => {
-    // Создаем Audio-объект только один раз, если его нет
-    if (!audioRef.current) {
-        audioRef.current = new Audio();
-    }
-    const audio = audioRef.current;
-    
-    // Если аудио не инициализировано (например, при первом рендере), выходим
-    if (!audio) return; 
-
-    // Слушатели событий
-    const setAudioData = () => {
-      setDuration(audio.duration);
-    };
-
-    const updateTime = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-
-    const handleError = (e) => {
-      console.error("Audio playback error:", e);
-      setError(`Ошибка воспроизведения: ${e.message || 'Неизвестная ошибка'}`);
-      setIsLoading(false);
-      setIsPlaying(false);
-    };
-
-    audio.addEventListener('loadedmetadata', setAudioData);
-    audio.addEventListener('timeupdate', updateTime);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-
-    // Функция очистки: удаляем слушатели при размонтировании
-    return () => {
-      audio.removeEventListener('loadedmetadata', setAudioData);
-      audio.removeEventListener('timeupdate', updateTime);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-    };
-  }, []); // Пустой массив зависимостей: слушатели ставятся один раз
 
   /**
    * Инициализация нового аудиофайла и запуск его воспроизведения.
    * @param {string} url - URL аудиофайла (Blob URL или API URL).
    */
   const setAudioUrl = useCallback((url) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    // 1. Очистка предыдущего Blob URL (если он был)
-    if (currentAudioUrl && currentAudioUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(currentAudioUrl);
+    // 1. Очистка предыдущего аудио
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      // Освобождаем память, если это был Blob URL
+      if (currentAudioUrl && currentAudioUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(currentAudioUrl); // Освобождаем предыдущий Blob URL
+      }
     }
+
+    // 2. Создаем новый Audio объект
+    const newAudio = new Audio(url);
+    newAudio.loop = false;
     
-    // 2. Установка нового URL, сброс времени и запуск
-    audio.src = url;
-    audio.load(); // Принудительно загружаем метаданные
-    audio.currentTime = 0;
-    setCurrentTime(0);
-    setDuration(0);
-    setCurrentAudioUrl(url);
-    setIsPlaying(true);
-    
-    audio.play().catch(e => {
-        // Ошибка может возникнуть из-за политики браузера (автовоспроизведение)
-        console.error("Error playing audio automatically:", e);
-        // Не показываем ошибку пользователю, если это просто политика автовоспроизведения
-        // Просто устанавливаем паузу.
-        // setError("Для воспроизведения нажмите кнопку 'Play'."); 
-        setIsPlaying(false);
+    // Устанавливаем текущие настройки скорости и громкости
+    newAudio.playbackRate = playbackRate;
+    newAudio.volume = volume;
+
+    // 3. Настройка слушателей событий
+    newAudio.addEventListener('loadedmetadata', () => {
+      setDuration(newAudio.duration);
     });
+    newAudio.addEventListener('timeupdate', () => {
+      setCurrentTime(newAudio.currentTime);
+    });
+    newAudio.addEventListener('ended', () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    });
+    newAudio.addEventListener('error', (e) => {
+      console.error("Audio error:", e);
+      setError("Ошибка воспроизведения аудио.");
+      setIsLoading(false);
+      setIsPlaying(false);
+    });
+
+    // 4. Сохраняем ссылку и запускаем
+    audioRef.current = newAudio;
+    setCurrentAudioUrl(url);
+    setIsLoading(false); // Загрузка завершена
     
-    setError(null);
-    setIsLoading(false);
-  }, [currentAudioUrl]); // currentAudioUrl нужен для корректной очистки Blob URL
+    newAudio.play().then(() => {
+      setIsPlaying(true);
+    }).catch(e => {
+      console.error("Play failed:", e);
+      setError("Воспроизведение было заблокировано браузером (требуется жест пользователя). Нажмите Play.");
+      setIsPlaying(false);
+    });
+  }, [currentAudioUrl, playbackRate, volume]); // Зависимости для применения начальных значений
 
   /**
-   * Переключение Пауза/Воспроизведение.
+   * Переключение состояния воспроизведения.
    */
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
-    if (audio && currentAudioUrl) {
+    if (audio) {
       if (isPlaying) {
         audio.pause();
       } else {
+        // Убедимся, что скорость и громкость установлены, прежде чем играть
+        audio.playbackRate = playbackRate;
+        audio.volume = volume;
         audio.play().catch(e => {
-             console.error("Error toggling play:", e);
-             setError("Ошибка воспроизведения. Попробуйте снова.");
-             setIsPlaying(false);
+            console.error("Resume play failed:", e);
+            setError("Ошибка возобновления воспроизведения.");
         });
       }
       setIsPlaying(!isPlaying);
     }
-  }, [isPlaying, currentAudioUrl]); // ✅ ИСПРАВЛЕНИЕ: Добавлен currentAudioUrl для надежности
+  }, [isPlaying, playbackRate, volume]);
+  
+  /**
+   * Установка новой скорости воспроизведения.
+   */
+  const setPlaybackRate = useCallback((rate) => {
+      const audio = audioRef.current;
+      if (audio) {
+          audio.playbackRate = rate;
+      }
+      setPlaybackRateState(rate);
+  }, []);
 
   /**
-   * Перемотка на указанное время.
-   * @param {number} time - Новая позиция в секундах
+   * Установка новой громкости.
+   */
+  const setVolume = useCallback((vol) => {
+      const audio = audioRef.current;
+      if (audio) {
+          audio.volume = vol;
+      }
+      setVolumeState(vol);
+  }, []);
+
+  /**
+   * Перемотка на новую позицию в секундах
    */
   const seekTo = useCallback((time) => {
     const audio = audioRef.current;
-    // Проверка, что время валидно и находится в пределах длительности
-    if (audio && isFinite(time) && time >= 0 && duration > 0 && time <= duration) {
+    if (audio && isFinite(time) && time >= 0 && time <= duration) {
       audio.currentTime = time;
       setCurrentTime(time);
     }
-  }, [duration]); // ✅ ИСПРАВЛЕНИЕ: Только duration в зависимостях
+  }, [duration]);
 
   /**
    * Сброс всех состояний плеера (например, при очистке формы)
@@ -141,11 +136,11 @@ export const PlayerProvider = ({ children }) => {
   const resetPlayer = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = ''; // Очистка src
+      audioRef.current.src = '';
+      audioRef.current = null;
     }
-    // Освобождаем память, если это был Blob URL
     if (currentAudioUrl && currentAudioUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(currentAudioUrl); 
+      URL.revokeObjectURL(currentAudioUrl); // Освобождаем Blob URL
     }
     setCurrentAudioUrl(null);
     setIsPlaying(false);
@@ -153,7 +148,10 @@ export const PlayerProvider = ({ children }) => {
     setError(null);
     setDuration(0);
     setCurrentTime(0);
-  }, [currentAudioUrl]); // ✅ ИСПРАВЛЕНИЕ: currentAudioUrl нужен для корректной очистки Blob URL
+    // Сбрасывать rate/volume не обязательно, они могут оставаться как есть
+    // setPlaybackRateState(1.0);
+    // setVolumeState(1.0); 
+  }, [currentAudioUrl]); 
 
   // Объект контекста, который будет передан дочерним элементам
   const contextValue = {
@@ -163,12 +161,16 @@ export const PlayerProvider = ({ children }) => {
     error,
     duration,
     currentTime,
+    playbackRate, // Новое
+    volume,       // Новое
     setIsLoading, 
     setError,     
     setAudioUrl,  
     togglePlay,   
     seekTo,       
-    resetPlayer   
+    resetPlayer,  
+    setPlaybackRate, // Новое
+    setVolume,       // Новое
   };
 
   return (
@@ -177,3 +179,5 @@ export const PlayerProvider = ({ children }) => {
     </PlayerContext.Provider>
   );
 };
+
+export default PlayerContext;
