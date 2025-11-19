@@ -1,7 +1,6 @@
 // Файл: webapp/pages/_app.js
 import '../styles/globals.css';
-// Для аналитики на Vercel
-import { Analytics } from "@vercel/analytics/react"; 
+// УДАЛЕНО: import { Analytics } from "@vercel/analytics/react"; 
 
 /**
  * Основной компонент приложения Next.js.
@@ -13,8 +12,8 @@ function MyApp({ Component, pageProps }) {
       {/* Основной компонент страницы */}
       <Component {...pageProps} />
       
-      {/* Интеграция Vercel Analytics для отслеживания (необязательно, но полезно) */}
-      <Analytics />
+      {/* УДАЛЕНО: Интеграция Vercel Analytics */}
+      {/* <Analytics /> */}
     </>
   );
 }
