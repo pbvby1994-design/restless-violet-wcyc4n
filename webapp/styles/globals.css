@@ -1,72 +1,67 @@
 /* Файл: webapp/styles/globals.css */
 
-/* Импорт Tailwind CSS - ДОЛЖНЫ БЫТЬ В САМОМ НАЧАЛЕ */
+/* --- 1. Импорт Tailwind CSS (Обязательно в начале) --- */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 1. Base Styles for Telegram Mini App 
-   Используем CSS-переменные Telegram, а для fallback - функцию theme() 
-*/
+/* --- 2. Базовые стили для Telegram Mini App --- */
 body {
-  /* Основной фон: Цвет Telegram WebApp, или fallback из Tailwind config */
-  background-color: var(--tg-theme-bg-color, theme('colors.bg.DEFAULT'));
-  /* Основной текст: Цвет Telegram WebApp, или fallback из Tailwind config */
-  color: var(--tg-theme-text-color, theme('colors.txt.primary'));
+  /* Мы используем прямые HEX-коды в качестве фолбэка. 
+    PostCSS не должен ломаться о чистый CSS (var, hex). 
+    Цвета взяты из tailwind.config.js (bg.DEFAULT: #0B0F15, txt.primary: #FFFFFF)
+  */
+  background-color: var(--tg-theme-bg-color, #0B0F15);
+  color: var(--tg-theme-text-color, #FFFFFF);
   
-  /* Устанавливаем шрифт Inter */
   font-family: 'Inter', sans-serif;
-  
-  /* Убедитесь, что приложение занимает всю высоту */
   min-height: 100vh;
-  
-  /* Плавный переход для смены темы */
   transition: background-color 0.3s, color 0.3s;
 }
 
-/* 2. Custom Classes / Переопределение стандартных элементов */
+/* --- 3. Кастомные классы (Используем @apply для Tailwind-логики) --- */
 
-/* Стиль для инпутов, чтобы они выглядели как в Telegram */
-input, textarea, button, select {
-  /* Важно: Устанавливаем цвет границы с fallback, чтобы избежать синтаксических ошибок */
-  border-color: var(--tg-theme-hint-color, theme('colors.txt.muted')) !important;
-  /* Цвет текста */
-  color: var(--tg-theme-text-color, theme('colors.txt.primary')) !important;
+/* Стиль для инпутов: применяем классы Tailwind для эстетики */
+input, textarea, select {
+  /* Fолбэк для границы: #5E6470 (цвет muted) */
+  border-color: var(--tg-theme-hint-color, #5E6470) !important;
+  /* Fолбэк для текста: #FFFFFF (цвет primary) */
+  color: var(--tg-theme-text-color, #FFFFFF) !important;
+  
+  /* Применяем классы для закругления и фона */
+  @apply rounded-xl bg-bg-glass placeholder-txt-secondary;
 }
 
-/* Стиль для карточек/контейнеров с эффектом "стекла" 
-  Этот класс комбинирует чистый CSS и Tailwind (@apply).
-*/
+
+/* Стиль для карточек/контейнеров с эффектом "стекла" */
 .card-glass {
-  /* Используем чистый CSS для background-color и эффекта матового стекла */
-  background-color: theme('colors.bg.card'); 
+  /*
+    Используем чистый CSS для фона и эффекта. 
+    Цвет bg.card (rgba(255, 255, 255, 0.03)) теперь вставлен вручную.
+  */
+  background-color: rgba(255, 255, 255, 0.03); 
   backdrop-filter: blur(8px);
-  /* Легкая граница */
   border: 1px solid rgba(255, 255, 255, 0.1);
-  /* Tailwind-классы для закругления, тени и отступов */
-  @apply rounded-xl shadow-card p-4 transition-all duration-300;
+  /* Основные классы Tailwind */
+  @apply rounded-2xl shadow-card p-4 transition-all duration-300;
 }
 
 /* Стиль для TextArea */
 .textarea-input {
-  /* @apply классы: */
-  @apply w-full resize-none p-3 rounded-lg border-2 border-txt-muted/50 focus:border-accent-neon focus:ring-accent-neon text-txt-primary placeholder-txt-secondary transition-all duration-200;
+  @apply w-full resize-none p-3 rounded-lg border-2 focus:border-accent-neon focus:ring-accent-neon text-txt-primary transition-all duration-200;
   
-  /* Переопределение фона и границы через Telegram-переменные с fallback */
-  background-color: var(--tg-theme-secondary-bg-color, theme('colors.bg.glass'));
-  border-color: var(--tg-theme-hint-color, theme('colors.txt.muted')) !important;
+  /* Фолбэк для фона: rgba(255, 255, 255, 0.04) */
+  background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.04));
+  /* Фолбэк для границы: #5E6470 */
+  border-color: var(--tg-theme-hint-color, #5E6470) !important;
 }
 
-/* Стили для анимации эквалайзера в компоненте плеера.
-  Обратите внимание: `mx-[1px]` - это произвольное значение Tailwind, которое может 
-  быть причиной ошибки, если синтаксис не поддерживается на Vercel. 
-  Заменяем на стандартные классы.
-*/
+/* Стили для анимации эквалайзера */
 .bar {
-  @apply w-1 h-full bg-accent-neon rounded-full inline-block mx-0.5; /* mx-[1px] заменен на mx-0.5 */
+  /* Используем w-1 h-full вместо w-[3px], чтобы избежать JIT-синтаксиса в @apply */
+  @apply w-1 h-full bg-accent-neon rounded-full inline-block mx-0.5;
 }
 
-/* Анимация для "bars" плеера */
 .animate-bars-1 { animation: up-down 1.2s ease-in-out infinite alternate; }
 .animate-bars-2 { animation: up-down 1.4s ease-in-out infinite alternate; }
 .animate-bars-3 { animation: up-down 1.1s ease-in-out infinite alternate; }
