@@ -1,9 +1,9 @@
 // Файл: webapp/components/Layout.js
 import { useEffect } from 'react';
-import WebApp from '@twa-dev/sdk'; // ✅ Исправлено: импортируем WebApp по умолчанию
+import WebApp from '@twa-dev/sdk'; // Импорт TWA SDK
+import Header from './Header'; // Импорт Header (теперь должен быть доступен)
+import Footer from './Footer'; // Импорт Footer (теперь должен быть доступен)
 import { usePlayer } from '@/context/PlayerContext';
-import Header from './Header';
-import Footer from './Footer';
 
 /**
  * Основной компонент-обертка для макета приложения.
@@ -22,6 +22,7 @@ const Layout = ({ children }) => {
       const mainBg = themeParams.bg_color || '#0B0F15';
       const headerBg = themeParams.header_bg_color || mainBg;
       
+      // Установка цветов, адаптированных к теме Telegram
       WebApp.setHeaderColor(headerBg);
       WebApp.setBackgroundColor(mainBg);
     } else {
@@ -31,12 +32,13 @@ const Layout = ({ children }) => {
 
 
   return (
+    // Обновленный Layout использует Header и Footer.
+    // Класс flex-col и min-h-screen гарантируют, что футер будет внизу.
     <div className="min-h-screen bg-bg-default text-txt-primary flex flex-col">
       <Header />
-      <div className="flex-grow">
+      <main className="flex-grow max-w-lg w-full mx-auto p-4 md:p-6 lg:p-8">
         {children}
-      </div>
-      {/* Footer можно использовать для глобальных элементов, таких как мини-плеер */}
+      </main>
       <Footer />
     </div>
   );
