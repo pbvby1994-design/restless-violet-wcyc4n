@@ -6,20 +6,17 @@
 @tailwind utilities;
 
 /* 1. Base Styles for Telegram Mini App 
-  Используем переменные из Tailwind (bg-bg, text-txt-primary)
-  как запасной вариант, но стараемся использовать переменные Telegram SDK 
-  для нативной поддержки темы.
+  Используем переменные Telegram SDK для нативной поддержки темы.
+  Запасные (fallback) цвета теперь жестко закодированы, чтобы избежать ошибки theme()
 */
 body {
   /* Используем переменные Telegram: 
     --tg-theme-bg-color для фона
     --tg-theme-text-color для основного текста
-    Если SDK не работает, используем запасные цвета из Tailwind/CSS 
+    Если SDK не работает, используем запасные цвета из конфигурации
   */
-  /* ИСПРАВЛЕНО: theme('colors.bg.DEFAULT') заменено на #0B0F15 */
-  background-color: var(--tg-theme-bg-color, #0B0F15);
-  /* ИСПРАВЛЕНО: theme('colors.txt.primary') заменено на #FFFFFF */
-  color: var(--tg-theme-text-color, #FFFFFF);
+  background-color: var(--tg-theme-bg-color, #0B0F15); /* Fallback: bg-bg-DEFAULT */
+  color: var(--tg-theme-text-color, #FFFFFF); /* Fallback: txt-primary */
   
   /* Устанавливаем шрифт Inter */
   font-family: 'Inter', sans-serif;
@@ -34,40 +31,35 @@ body {
 /* Переопределяем некоторые стили для лучшей интеграции в Telegram */
 input, textarea, button, select {
   /* Используем цвета Telegram для инпутов, если они доступны */
-  /* ИСПРАВЛЕНО: theme('colors.txt.secondary') заменено на #9EA8B7 */
-  border-color: var(--tg-theme-hint-color, #9EA8B7);
-  /* ИСПРАВЛЕНО: theme('colors.txt.primary') заменено на #FFFFFF */
-  color: var(--tg-theme-text-color, #FFFFFF);
+  border-color: var(--tg-theme-hint-color, #9EA8B7); /* Fallback: txt-secondary */
+  color: var(--tg-theme-text-color, #FFFFFF); /* Fallback: txt-primary */
   
   /* Убираем фоновый цвет по умолчанию для инпутов, чтобы лучше смотреться на фоне Telegram */
   background-color: transparent; 
 }
 
 /* 2. Custom Tailwind Components/Utilities */
+
 /* Стиль для кнопок, использующих акцентный цвет (например, "Генерировать")
-  Используем переменную Telegram Main Button Color, если она доступна,
-  в противном случае - наш неоновый акцентный цвет.*/
+  Используем переменную Telegram Main Button Color, если она доступна.
+*/
 .btn-primary {
-  /* Tailwind классы для запасного варианта */
   @apply bg-accent-neon hover:bg-accent-light text-white font-bold py-3 px-6 rounded-xl shadow-neon transition-all duration-200 ease-in-out;
-  
-  /* Переменные Telegram для приоритетного стиля */
-  background-color: var(--tg-theme-button-color, #B06EFF);
-  color: var(--tg-theme-button-text-color, #FFFFFF);
+  background-color: var(--tg-theme-button-color, #B06EFF); /* Fallback: accent-neon */
+  color: var(--tg-theme-button-text-color, #FFFFFF); /* Fallback: txt-primary */
   box-shadow: 0 0 15px rgba(136, 80, 255, 0.4); /* Neon effect shadow */
 }
 
 .btn-primary:disabled {
   @apply bg-gray-500 hover:bg-gray-500 cursor-not-allowed opacity-60 shadow-none;
-  /* ИСПРАВЛЕНО: theme('colors.txt.muted') заменено на #5E6470 */
-  background-color: var(--tg-theme-hint-color, #5E6470) !important;
+  background-color: var(--tg-theme-hint-color, #5E6470) !important; /* Fallback: txt-muted */
   color: #FFFFFF !important;
 }
 
-/* Стиль для карточек/контейнеров с эффектом "стекла"*/
+/* Стиль для карточек/контейнеров с эффектом "стекла"
+*/
 .card-glass {
-  /* ИСПРАВЛЕНО: theme('colors.bg.card') заменено на rgba(255, 255, 255, 0.03) */
-  background-color: rgba(255, 255, 255, 0.03); 
+  background-color: rgba(255, 255, 255, 0.03); /* Fallback: bg-card */
   /* Эффект матового стекла */
   backdrop-filter: blur(8px);
   /* Легкая граница */
@@ -75,19 +67,18 @@ input, textarea, button, select {
   @apply rounded-xl shadow-card p-4 transition-all duration-300;
 }
 
-/* Стиль для TextArea */
+/* Стиль для TextArea 
+*/
 .textarea-input {
   @apply w-full resize-none p-3 rounded-lg border-2 border-txt-muted/50 focus:border-accent-neon focus:ring-accent-neon bg-bg-glass text-txt-primary placeholder-txt-secondary transition-all duration-200;
-  /* ИСПРАВЛЕНО: theme('colors.bg.glass') заменено на rgba(255, 255, 255, 0.04) */
-  background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.04));
-  /* ИСПРАВЛЕНО: theme('colors.txt.muted') заменено на #5E6470 */
-  border-color: var(--tg-theme-hint-color, #5E6470) !important;
+  background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.04)); /* Fallback: bg-glass */
+  border-color: var(--tg-theme-hint-color, #5E6470) !important; /* Fallback: txt-muted */
 }
 
 /* Добавляем стили для анимации эквалайзера в компоненте плеера */
 .bar {
   @apply w-1 h-full bg-accent-neon rounded-full inline-block mx-[1px];
-  background-color: var(--tg-theme-button-color, #B06EFF);
+  background-color: var(--tg-theme-button-color, #B06EFF); /* Fallback: accent-neon */
   animation: wave 1.5s ease-in-out infinite;
 }
 
@@ -105,6 +96,15 @@ input, textarea, button, select {
 
 .bar:nth-child(5) {
   animation-delay: -0.3s;
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1.0);
+  }
 }
 
 /* Дополнительно: чтобы избежать сдвигов макета, используем min-h-screen */
