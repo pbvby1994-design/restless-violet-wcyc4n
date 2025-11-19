@@ -1,182 +1,149 @@
-// Файл: webapp/pages/index.js (Applesque Style)
-
-import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import Player from '../components/Player';
+import { AnimatePresence, motion } from 'framer-motion';
 
-// Динамический импорт Layout для корректной работы с Telegram SDK
-const Layout = dynamic(() => import('../components/Layout'), { 
-  ssr: false, 
-  loading: () => (
-    <div className="flex justify-center items-center h-screen text-lg text-gray-800 dark:text-gray-200 bg-white dark:bg-black">
-        Инициализация WebApp...
-    </div>
-  )
-});
+import TabBar from '../components/TabBar';
+import FullPlayer from '../components/FullPlayer';
+import { usePlayer } from '../context/PlayerContext';
 
-const TTS_API_URL = '/api/tts/generate'; 
+// Динамический импорт Layout
+const Layout = dynamic(() => import('../components/Layout'), { ssr: false });
 
-const Home = () => {
-  const [text, setText] = useState('');
-  const [currentAudio, setCurrentAudio] = useState(null);
+// Мок-данные (имитация библиотеки)
+const LIBRARY_ITEMS = [
+  { id: 1, title: "Искусство Войны", author: "Сунь-цзы", category: "Философия", color: "from-red-500 to-orange-500", text: "Война — это великое дело для государства..." },
+  { id: 2, title: "Атомные привычки", author: "Джеймс Клир", category: "Саморазвитие", color: "from-blue-500 to-cyan-500", text: "Небольшие изменения приводят к впечатляющим результатам..." },
+  { id: 3, title: "Sapiens", author: "Юваль Ной Харари", category: "История", color: "from-emerald-500 to-green-500", text: "Сто тысяч лет назад землю населяло..." },
+  { id: 4, title: "1984", author: "Джордж Оруэлл", category: "Фантастика", color: "from-purple-500 to-pink-500", text: "Был холодный ясный апрельский день..." },
+];
+
+// Внутренний компонент для контента страницы
+const AppContent = () => {
+  const [activeTab, setActiveTab] = useState('library');
+  const { playTrack, currentTrack } = usePlayer();
+  const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false); 
-  
-  const MAX_CHARS = 5000;
 
-  const togglePlay = useCallback(() => {
-    if (currentAudio) {
-      if (isPlaying) {
-        currentAudio.pause();
-      } else {
-        currentAudio.play();
-      }
-      setIsPlaying(prev => !prev);
-    }
-  }, [currentAudio, isPlaying]);
-
-  const handleTextToSpeech = useCallback(async () => {
-    setError(null);
-
-    if (text.trim().length < 5) {
-      setError('Введите текст длиной не менее 5 символов.');
-      return;
-    }
-    
-    if (currentAudio) {
-      currentAudio.pause();
-      setCurrentAudio(null);
-      setIsPlaying(false);
-    }
-
+  // Логика генерации (из старого index.js, адаптированная)
+  const handleGenerate = async (text, itemTitle) => {
+    if (!text) return;
     setLoading(true);
-
+    
     try {
-      const response = await fetch(TTS_API_URL, {
+      const response = await fetch('/api/tts/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          text: text,
-          voice: 'default'
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, voice: 'default' }),
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Ошибка API (${response.status}): ${errorText.substring(0, 100)}...`);
-      }
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
       
-      audio.onplay = () => setIsPlaying(true);
-      audio.onpause = () => setIsPlaying(false);
-      audio.onended = () => {
-        setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
-        setCurrentAudio(null);
-      };
+      if (!response.ok) throw new Error('API Error');
       
-      setCurrentAudio(audio);
-      audio.play();
-
-    } catch (err) {
-      console.error(err);
-      setError(err.message || 'Не удалось сгенерировать голос. Проверьте соединение.');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      // Запускаем плеер через контекст и переходим в таб плеера
+      playTrack({ title: itemTitle, author: 'TTS Voice', textPreview: text }, url);
+      setActiveTab('player');
+      
+    } catch (e) {
+      alert('Ошибка генерации');
     } finally {
       setLoading(false);
     }
-  }, [text, currentAudio]);
-
+  };
 
   return (
-    <Layout>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="max-w-xl mx-auto min-h-[calc(100vh-2rem)] flex flex-col justify-between" 
-      >
-        <div className="flex-grow p-4">
-          <h1 className="text-4xl font-bold mb-6 text-center text-gray-900 dark:text-white tracking-tight">
-            🎙️ Голосовой Ассистент
-          </h1>
-
-          {/* Поле ввода - Clean Design */}
-          <div className="relative mb-6">
-            <textarea
-              className="w-full h-48 p-5 pt-8 border border-gray-300 dark:border-zinc-700 rounded-3xl text-lg resize-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-zinc-800 dark:text-white transition-all shadow-lg focus:shadow-xl font-sans"
-              placeholder="Введите текст для озвучивания..."
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value.substring(0, MAX_CHARS));
-                setError(null);
-              }}
-            />
-            {/* Счетчик символов - Тонкий шрифт */}
-            <div className="absolute top-3 right-5 text-sm font-light text-gray-500 dark:text-gray-400">
-                {text.length} / {MAX_CHARS}
+    <div className="h-screen w-full relative">
+      
+      {/* --- TAB: LIBRARY --- */}
+      {activeTab === 'library' && (
+        <motion.div 
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="p-6 pb-32 h-full overflow-y-auto no-scrollbar"
+        >
+          {/* Header */}
+          <div className="flex justify-between items-end mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-white tracking-tight">Библиотека</h1>
+              <p className="text-gray-400 text-sm mt-1">Ваши книги и статьи</p>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center border border-white/10">
+              👤
             </div>
           </div>
-          
 
-          {/* Индикатор Ошибки - Плавное появление */}
-          <AnimatePresence>
-            {error && (
-                <motion.div
-                    initial={{ opacity: 0, scaleY: 0 }}
-                    animate={{ opacity: 1, scaleY: 1 }}
-                    exit={{ opacity: 0, scaleY: 0 }}
-                    transition={{ duration: 0.3 }}
-                    style={{ originY: 0 }}
-                    className="mt-3 p-4 bg-red-50 border border-red-300 text-red-700 rounded-xl dark:bg-red-900/50 dark:border-red-700 dark:text-red-200 font-medium overflow-hidden shadow-sm"
+          {/* Search / Input Text */}
+          <div className="mb-8">
+            <div className="relative">
+              <textarea 
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="Вставьте текст или ссылку для озвучивания..."
+                className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl p-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all resize-none h-32 text-sm"
+              />
+              {inputText.length > 0 && (
+                <button 
+                  onClick={() => handleGenerate(inputText, "Мой Текст")}
+                  disabled={loading}
+                  className="absolute bottom-3 right-3 bg-white text-black px-4 py-2 rounded-xl text-xs font-bold hover:bg-gray-200 transition"
                 >
-                    {error}
-                </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Кнопки действий - Крупные, чистые кнопки */}
-          <div className="mt-8 flex flex-col space-y-4">
-            <motion.button
-              onClick={handleTextToSpeech}
-              whileTap={{ scale: 0.98, backgroundColor: '#1d89ff' }} // Мягкое нажатие, как в iOS
-              disabled={loading || text.length < 5}
-              className={`w-full py-4 rounded-xl font-semibold text-xl transition-all tracking-wide ${
-                loading 
-                  ? 'bg-blue-400 dark:bg-blue-600 text-white cursor-not-allowed opacity-75'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white shadow-xl shadow-blue-500/50 dark:shadow-blue-700/50'
-              }`}
-            >
-              {loading ? '🎤 Генерация...' : '🔊 Слушать Голосом'}
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.98 }}
-              disabled={true} 
-              className="w-full py-4 rounded-xl font-semibold text-xl transition-colors bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-gray-400 cursor-not-allowed opacity-70 shadow-md"
-            >
-              📎 Загрузить Документ (WIP)
-            </motion.button>
+                  {loading ? "..." : "Озвучить ➝"}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        
-        {/* Компонент Плеера */}
-        <Player
-          isPlaying={isPlaying}
-          togglePlay={togglePlay}
-          currentAudio={currentAudio}
-          loading={loading}
-        />
 
-      </motion.div>
-    </Layout>
+          {/* Grid */}
+          <h2 className="text-xl font-semibold mb-4 text-white">Популярное</h2>
+          <div className="grid grid-cols-2 gap-4">
+            {LIBRARY_ITEMS.map((item) => (
+              <motion.div 
+                key={item.id}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => handleGenerate(item.text, item.title)}
+                className="bg-[#1C1C1E] p-3 rounded-2xl border border-white/5 relative group overflow-hidden"
+              >
+                {/* Обложка */}
+                <div className={`w-full aspect-[3/4] rounded-xl bg-gradient-to-br ${item.color} mb-3 relative shadow-lg`}>
+                   <div className="absolute bottom-2 left-2 right-2 bg-black/30 backdrop-blur-md rounded-lg p-2">
+                     <span className="text-[10px] text-white font-bold uppercase tracking-wider">{item.category}</span>
+                   </div>
+                </div>
+                <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
+                <p className="text-xs text-gray-500">{item.author}</p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* --- TAB: PLAYER --- */}
+      {activeTab === 'player' && (
+        <FullPlayer />
+      )}
+
+      {/* --- TAB: SETTINGS (Placeholder) --- */}
+      {activeTab === 'settings' && (
+         <div className="p-6 flex flex-col items-center justify-center h-full text-gray-400">
+            <h2 className="text-2xl font-bold text-white mb-2">Личный Кабинет</h2>
+            <p className="text-sm mb-6">Доступно в Premium версии</p>
+            <button className="w-full py-4 bg-gradient-to-r from-brand-primary to-brand-accent rounded-2xl text-white font-bold shadow-glow">
+               Оформить подписку
+            </button>
+         </div>
+      )}
+
+      {/* Нижняя навигация */}
+      <TabBar activeTab={activeTab} setActiveTab={setActiveTab} />
+      
+    </div>
   );
 };
 
-export default Home;
+export default function Index() {
+  return (
+    <Layout>
+      <AppContent />
+    </Layout>
+  );
+}
