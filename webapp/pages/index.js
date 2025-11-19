@@ -68,6 +68,9 @@ const Home = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        // **Оптимизация: Для запросов, которые генерируют уникальный контент, 
+        // используем 'no-store', чтобы избежать кэширования браузером и прокси.**
+        cache: 'no-store', 
         // Отправляем текст и выбранный голос на бэкенд
         body: JSON.stringify({ text: final_text.trim(), voice: selectedVoice }),
       });
