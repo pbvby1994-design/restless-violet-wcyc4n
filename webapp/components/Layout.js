@@ -1,48 +1,61 @@
+// Файл: webapp/components/Layout.js
 import { useEffect, useState } from 'react';
-import { PlayerProvider } from '../context/PlayerContext'; // Импорт провайдера
-import WebApp from '@twa-dev/sdk';
+import { init } from '@twa-dev/sdk'; 
+import { PlayerProvider } from '../context/PlayerContext';
 
-// Этот компонент теперь служит оберткой для всего приложения
 const Layout = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
+  const [isSdkInitialized, setIsSdkInitialized] = useState(false);
 
   useEffect(() => {
-    // Проверка наличия SDK (чтобы не падало в обычном браузере)
-    if (typeof window !== 'undefined' && WebApp) {
-        try {
-            WebApp.ready(); 
-            WebApp.expand(); // Раскрываем на весь экран сразу
-            
-            // Устанавливаем черный хедер и фон для соответствия дизайну
-            WebApp.setHeaderColor('#0B0F15'); 
-            WebApp.setBackgroundColor('#0B0F15');
-            
-            // Отключаем свайп закрытия (для полноэкранного опыта)
-            if (WebApp.isVersionAtLeast('7.7')) {
-               WebApp.disableVerticalSwipes();
-            }
+    let tg;
+    try {
+      // 1. Инициализация SDK
+      init(); 
+      tg = window.Telegram.WebApp; 
+      
+      // 2. Настройка UI:
+      // Устанавливаем основной цвет
+      document.body.style.backgroundColor = tg.themeParams.bg_color || '#1e1e2d';
+      
+      // Включаем виброотклик при нажатии
+      tg.HapticFeedback.impactOccurred('light');
 
-            setIsReady(true);
-        } catch (e) {
-            console.error("Telegram WebApp Init Error", e);
-            setIsReady(true);
-        }
-    } else {
-        setIsReady(true);
+      // Устанавливаем цвет кнопки (MainButton)
+      tg.MainButton.setParams({
+        text_color: tg.themeParams.button_text_color || '#ffffff',
+        color: tg.themeParams.button_color || '#8850ff',
+      });
+
+      // Скрываем навигационную кнопку "назад"
+      tg.BackButton.hide();
+
+      setIsSdkInitialized(true);
+    } catch (e) {
+      // Если это не Telegram, или ошибка инициализации
+      console.error("Telegram WebApp SDK failed to initialize:", e.message);
+      setIsSdkInitialized(true); // Все равно продолжаем работу
+    } finally {
+      // Это нужно, чтобы контент не рендерился, пока не завершится useEffect
+      setIsReady(true);
     }
   }, []);
 
   if (!isReady) {
-    return <div className="bg-[#0B0F15] h-screen w-screen" />;
+    return (
+      <div className="flex justify-center items-center h-screen text-lg bg-bg-default text-txt-primary">
+        Загрузка приложения...
+      </div>
+    );
   }
 
-  // Оборачиваем все в PlayerProvider
-  // Важно: Используем шрифт sans (Inter) и черный фон
+  // Обновляем корневой элемент для соответствия стилям Tailwind
   return (
+    // PlayerProvider теперь внутри Layout
     <PlayerProvider>
-      <main className="min-h-screen bg-[#0B0F15] text-white font-sans selection:bg-[#8850FF] selection:text-white overflow-hidden">
+      <div className="min-h-screen max-w-md mx-auto relative overflow-hidden pb-32">
         {children}
-      </main>
+      </div>
     </PlayerProvider>
   );
 };
