@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    // Настройка путей для алиасов
+    "paths": {
+      "@/components/*": ["components/*"],
+      "@/context/*": ["context/*"],
+      "@/lib/*": ["lib/*"]
+    }
+  },
+  // Исключаем папку node_modules из компиляции
+  "exclude": ["node_modules"]
+}
