@@ -1,317 +1,187 @@
-import { useState, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import dynamic from 'next/dynamic';
-import { usePlayer } from '../context/PlayerContext';
-import { Volume2, Loader2 } from 'lucide-react';
-
-// === Динамические Импорты Компонентов ===
-// Layout - Главная обертка с инициализацией SDK
-const Layout = dynamic(() => import('../components/Layout'), { 
-  ssr: false, 
-  loading: () => (
-    <div className="flex justify-center items-center h-screen text-lg text-txt-primary bg-bg-default">
-        Инициализация WebApp...
-    </div>
-  )
-});
-
-// Навигация и Плееры (импортируем синхронно, они не зависят от SDK напрямую)
+// Файл: webapp/pages/index.js
+import { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
+// Удаляем dynamic и Layout, так как они теперь в _app.js и работают только на клиенте
+import { usePlayer } from '../context/PlayerContext'; // Импортируем хук плеера
 import TabBar from '../components/TabBar';
-import MiniPlayer from '../components/MiniPlayer';
-import FullPlayer from '../components/FullPlayer'; 
 import Library from '../components/Library';
-// Settings - заглушка, если его нет, создайте пустой файл webapp/components/Settings.js
-const Settings = () => (
-  <div className="p-6 text-center text-txt-secondary">
-    <h1 className="text-2xl font-bold text-white mb-4">Настройки</h1>
-    <p>Настройки находятся в разработке. Скоро здесь появится управление голосами и профилем.</p>
-  </div>
-);
+import PlayerControl from '../components/Player'; 
 
+// !!! АДРЕС ДЛЯ VERCEL !!!
+const TTS_API_URL = '/api/tts/generate/'; 
 
-// === Компонент Главного Экрана TTS ===
-const HomeContent = ({ text, setText, generateSpeech, isLoading, displayError, resetPlayer }) => {
-  
-  const isInputValid = text.trim().length >= 5 && text.trim().length <= 5000;
-  const tapEffect = { scale: 0.95 };
-
-  return (
-    <div className="p-4 max-w-md mx-auto pt-6">
-      
-      {/* Заголовок */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        transition={{ duration: 0.5 }}
-        className="mb-6 text-center"
-      >
-        <h1 className="text-3xl font-extrabold text-white mb-2">Генерация Аудио</h1>
-        <p className="text-txt-secondary text-sm">Вставьте текст для преобразования в речь.</p>
-      </motion.div>
-
-      {/* Ввод текста */}
-      <motion.div 
-        initial={{ opacity: 0, x: -20 }} 
-        animate={{ opacity: 1, x: 0 }} 
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="card-glass p-0 mb-6"
-      >
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Введите текст для озвучивания (минимум 5 символов)..."
-          rows={10}
-          maxLength={5000}
-          className="textarea-input h-48 border-none focus:ring-0 focus:border-0 rounded-xl"
-        />
-        <div className="p-3 pt-0 text-right text-xs text-txt-muted">
-          Символов: {text.length} / 5000
-        </div>
-      </motion.div>
-
-      {/* Выбор голоса (заглушка) */}
-      <motion.div 
-        initial={{ opacity: 0, x: 20 }} 
-        animate={{ opacity: 1, x: 0 }} 
-        transition={{ duration: 0.5, delay: 0.2 }}
-        className="card-glass mb-6 flex items-center justify-between"
-      >
-        <div className="flex items-center space-x-3">
-          <Volume2 className="text-accent-neon" size={24} />
-          <p className="font-medium text-white">Голос (Пока один)</p>
-        </div>
-        <p className="text-txt-secondary">Русский, Женский</p>
-      </motion.div>
-
-      {/* Кнопки действий */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        transition={{ duration: 0.5, delay: 0.3 }}
-        className="space-y-4 mb-20"
-      >
-        {/* Кнопка генерации */}
-        <motion.button
-          onClick={generateSpeech}
-          whileTap={isInputValid && !isLoading ? tapEffect : {}}
-          disabled={!isInputValid || isLoading}
-          className={`w-full py-3 rounded-xl font-semibold text-lg transition-colors flex items-center justify-center space-x-2 ${
-            !isInputValid || isLoading
-              ? 'bg-txt-muted/30 text-txt-secondary cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/50'
-          }`}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="animate-spin" size={20} />
-              <span>Генерация...</span>
-            </>
-          ) : (
-            '🔊 Слушать Голосом'
-          )}
-        </motion.button>
-
-        {/* Кнопка сброса/очистки */}
-        <motion.button
-          onClick={() => {
-            setText('');
-            resetPlayer();
-          }}
-          whileTap={tapEffect}
-          className="w-full py-3 rounded-xl font-semibold text-lg transition-colors bg-white/5 text-white/80 border border-white/10 hover:bg-white/10"
-        >
-          ❌ Очистить Ввод
-        </motion.button>
-      </motion.div>
-
-      {/* Сообщение об ошибке */}
-      <AnimatePresence>
-        {displayError && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="fixed bottom-32 left-1/2 transform -translate-x-1/2 p-3 rounded-xl bg-red-800 text-white shadow-lg z-50 max-w-xs text-center"
-          >
-            <p className="font-semibold">Ошибка!</p>
-            <p className="text-sm">{displayError}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-    </div>
-  );
-};
-
-
-// === ГЛАВНЫЙ КОМПОНЕНТ ПРИЛОЖЕНИЯ ===
 const Home = () => {
-  // Состояние ввода текста
   const [text, setText] = useState('');
+  const [selectedVoice, setSelectedVoice] = useState('default'); // Для будущего использования голоса
+  const [activeTab, setActiveTab] = useState('library'); // Состояние активной вкладки
   
-  // Состояние навигации
-  const [activeTab, setActiveTab] = useState('tts'); // 'tts' (Home), 'library', 'settings'
-  const [showFullPlayer, setShowFullPlayer] = useState(false); // Видимость полноэкранного плеера
-
   // 1. Используем контекст плеера
+  // Благодаря динамическому импорту Layout в _app.js, этот хук вызывается безопасно на клиенте.
   const { 
     setAudioUrl, 
-    setIsLoading: setPlayerLoading, 
-    setError: setPlayerError, 
-    isLoading: isPlayerLoading, 
-    currentTrack,
-    error: playerError, 
+    setIsLoading, 
+    setError, 
+    isLoading, 
+    error: playerError, // Ошибка плеера
     resetPlayer
   } = usePlayer();
 
-  // Объединяем состояния загрузки и ошибок
-  const [isApiLoading, setIsApiLoading] = useState(false);
-  const [apiError, setApiError] = useState(null);
-
-  const isLoading = isPlayerLoading || isApiLoading;
-  const displayError = playerError || apiError;
+  const [displayError, setDisplayError] = useState(null); // Локальная ошибка
+  const isGenerating = isLoading; // Удобный алиас
   
-  // Сбрасываем ошибку API, когда текст меняется
-  const handleTextChange = (newText) => {
-    setText(newText);
-    if (apiError) setApiError(null);
-  }
-
-  // API Endpoint (должен быть в корне Next.js app)
-  // Используем адрес, который вы настроили в vercel.json
-  const TTS_API_URL = '/api/tts/generate'; 
+  // Эффект нажатия для framer-motion
+  const tapEffect = { scale: 0.95 };
 
   /**
-   * Асинхронная функция для вызова TTS API
+   * Основная функция для отправки запроса на генерацию аудио.
    */
-  const generateSpeech = useCallback(async () => {
-    if (text.trim().length < 5 || isLoading) return;
-
-    // Сброс и установка состояний
-    resetPlayer();
-    setApiError(null);
-    setIsApiLoading(true);
-    setPlayerLoading(true);
-
+  const handleGenerate = useCallback(async () => {
+    if (isGenerating || text.trim().length < 5) return;
+    
+    // 0. Очистка перед началом
+    setIsLoading(true);
+    setDisplayError(null);
+    setError(null);
+    resetPlayer(); // Сбрасываем старый плеер
+    
     try {
       const response = await fetch(TTS_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // В продакшене Vercel CORS уже не будет проблемой
         },
         body: JSON.stringify({ 
           text: text, 
-          voice: 'default' 
+          voice: selectedVoice 
         }),
       });
 
       if (!response.ok) {
-        // Попытка прочитать детальное сообщение об ошибке
-        const errorText = await response.text();
-        let errorMessage = `Ошибка API: ${response.status} ${response.statusText}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.detail || errorMessage;
-        } catch (e) {
-          errorMessage = errorText || errorMessage;
-        }
-        throw new Error(errorMessage);
+        // Чтение детального сообщения об ошибке из API
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown API Error' }));
+        throw new Error(errorData.detail || `HTTP error! Status: ${response.status}`);
       }
 
-      // 1. Получаем Blob-данные (MP3)
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
+      // Ответ - это Audio/MP3 Stream
+      // Создаем Blob URL для воспроизведения
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
       
-      // 2. Устанавливаем данные в контекст плеера
-      setAudioUrl({ 
-          url: audioUrl,
-          title: text.length > 50 ? text.substring(0, 50) + '...' : text, // Укорачиваем заголовок
-          author: 'Сгенерировано' 
-      });
-
-      // 3. Переключаем на вкладку с плеером, если это не текущий экран (чтобы активировать FullPlayer)
-      // setActiveTab('player'); // Это не нужно, так как центральная кнопка будет вести в FullPlayer
+      setAudioUrl(audioUrl); // Устанавливаем URL и запускаем воспроизведение
+      setActiveTab('player'); // Переключаемся на вкладку плеера
 
     } catch (e) {
       console.error("Generation Error:", e);
-      setApiError(e.message || 'Произошла неизвестная ошибка при генерации.');
-      setPlayerError(e.message || 'Произошла неизвестная ошибка при генерации.');
-      setPlayerLoading(false); 
+      setDisplayError(e.message || 'Ошибка генерации аудио. Попробуйте снова.');
+      setError(e.message || 'Ошибка генерации');
     } finally {
-      setIsApiLoading(false);
+      setIsLoading(false);
     }
-  }, [text, isLoading, resetPlayer, setAudioUrl, setPlayerLoading, setPlayerError]);
+  }, [text, selectedVoice, isGenerating, setAudioUrl, setIsLoading, setError, resetPlayer]);
 
-  
-  // === РЕНДЕРИНГ КОНТЕНТА ВКЛАДОК ===
-  const renderContent = useMemo(() => {
+  // Функция для обработки клика по элементу библиотеки
+  const handleLibraryPlay = useCallback((book) => {
+    setText(book.text); // Устанавливаем текст книги
+    setActiveTab('player'); // Переключаемся на вкладку плеера
+    // Опционально: можно автоматически запустить handleGenerate(book.text)
+  }, []);
+
+  const renderContent = () => {
     switch (activeTab) {
       case 'library':
-        // onPlay - функция для запуска трека из библиотеки
-        const handleLibraryPlay = (book) => {
-          // Имитация запуска трека из библиотеки
-          resetPlayer();
-          setAudioUrl({ 
-              // TODO: Заменить на реальный API вызов для получения MP3
-              url: 'https://example.com/placeholder.mp3', 
-              title: book.title, 
-              author: book.author 
-          });
-          setActiveTab('tts'); // Возвращаем на главный экран (Home)
-        };
         return <Library onPlay={handleLibraryPlay} />;
-      case 'settings':
-        return <Settings />; 
-      case 'tts':
-      default:
+      case 'player':
         return (
-          <HomeContent 
-            text={text}
-            setText={handleTextChange}
-            generateSpeech={generateSpeech}
-            isLoading={isLoading}
-            displayError={displayError}
-            resetPlayer={resetPlayer}
-          />
-        );
-    }
-  }, [activeTab, text, generateSpeech, isLoading, displayError, resetPlayer]);
+          <div className="space-y-6">
+            <h1 className="text-xl font-bold text-txt-primary">Генерация Аудио</h1>
+            
+            {/* 2. Text Area Input */}
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Введите текст для озвучивания (мин. 5 символов)..."
+              className="textarea-input h-32"
+            />
+            
+            {/* 3. Player Control (отображается только при наличии аудио) */}
+            <PlayerControl />
+            
+            {/* 4. Action Buttons */}
+            <div className="space-y-3 pt-4">
+              {/* Кнопка генерации/слушать */}
+              <motion.button
+                onClick={handleGenerate}
+                disabled={isGenerating || text.trim().length < 5}
+                whileTap={tapEffect}
+                className={`w-full py-3 rounded-xl font-semibold text-lg transition-colors ${
+                  isGenerating || text.trim().length < 5
+                    ? 'bg-tg-hint-color/40 text-tg-hint-color cursor-not-allowed'
+                    : 'bg-accent hover:bg-accent-light text-white shadow-lg shadow-accent/50'
+                }`}
+              >
+                {isGenerating ? 'Генерация...' : '🔊 Слушать Голосом'}
+              </motion.button>
 
+              {/* Кнопка сброса/очистки */}
+              <motion.button
+                onClick={() => {
+                  setText('');
+                  resetPlayer();
+                }}
+                whileTap={tapEffect}
+                className="w-full py-3 rounded-xl font-semibold text-lg transition-colors bg-bg-glass text-txt-primary border border-txt-muted/20 hover:bg-white/10"
+              >
+                ❌ Очистить Ввод
+              </motion.button>
+            </div>
+
+            {/* Сообщение об ошибке */}
+            {(displayError || playerError) && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-4 p-3 rounded-xl bg-red-900/50 text-red-300 border border-red-800"
+              >
+                <p className="font-semibold">Ошибка!</p>
+                <p className="text-sm">{displayError || playerError}</p>
+              </motion.div>
+            )}
+            
+          </div>
+        );
+      case 'settings':
+        return (
+          <div className="p-4 card-glass min-h-[50vh]">
+             <h1 className="text-xl font-bold text-txt-primary mb-4">Настройки и Профиль</h1>
+             <p className="text-txt-secondary">
+               Здесь будут расположены настройки голоса, качества и информация о пользователе.
+             </p>
+             <div className="mt-8 space-y-4">
+               <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+                 <p className="text-txt-primary font-semibold">Голос:</p>
+                 <p className="text-txt-secondary">Русский (по умолчанию)</p>
+               </div>
+               <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+                 <p className="text-txt-primary font-semibold">Лимит текста:</p>
+                 <p className="text-txt-secondary">5000 символов (ограничение бесплатного API)</p>
+               </div>
+             </div>
+          </div>
+        );
+      default:
+        // Если вкладка не распознана, по умолчанию показываем Библиотеку
+        return <Library onPlay={handleLibraryPlay} />;
+    }
+  };
 
   return (
-    <Layout>
-      {/* Основной контент (Вкладка) */}
-      {/* Добавляем отступ снизу, чтобы контент не перекрывался TabBar и MiniPlayer */}
-      <div className="min-h-screen pt-4 pb-40">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab} // Ключ для анимации переключения вкладок
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-          >
-            {renderContent}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+    <div className="p-4 pt-8">
+      {renderContent()}
       
-      {/* Мини-плеер (появляется, когда есть трек) */}
-      {currentTrack && <MiniPlayer onOpenFullPlayer={() => setShowFullPlayer(true)} />}
-
-      {/* Tab Bar (навигация) */}
-      <TabBar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        onOpenFullPlayer={() => setShowFullPlayer(true)} 
-      />
-
-      {/* Полноэкранный плеер (Модальное окно) */}
-      <FullPlayer 
-        isOpen={showFullPlayer} 
-        onClose={() => setShowFullPlayer(false)} 
-      />
-    </Layout>
+      {/* TabBar всегда внизу */}
+      <TabBar activeTab={activeTab} setActiveTab={setActiveTab} />
+    </div>
   );
 };
 
