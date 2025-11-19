@@ -1,49 +1,56 @@
+// Файл: webapp/components/Layout.js
 import { useEffect, useState } from 'react';
-// Импортируем WebApp по умолчанию для лучшей типизации (при использовании TypeScript).
-// В JavaScript это можно использовать как хинт, хотя доступ к SDK идет через window.Telegram.WebApp.
-import WebApp from '@twa-dev/sdk'; 
+import WebApp from '@twa-dev/sdk'; // Импорт для типов (опционально)
 import { PlayerProvider } from '../context/PlayerContext';
 
 const Layout = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
-  const [isSdkInitialized, setIsSdkInitialized] = useState(false);
+  // Состояние для отслеживания инициализации SDK (в основном для отладки)
+  const [isSdkInitialized, setIsSdkInitialized] = useState(false); 
 
   useEffect(() => {
     let tg;
     try {
-      // 1. Получаем глобальный объект SDK, который инициализируется автоматически.
-      // Вызов init() удален, поскольку он не экспортируется и не нужен.
-      tg = window.Telegram.WebApp; 
-      
-      // 2. Сигнализируем Telegram, что приложение готово к отображению.
-      tg.ready(); 
-      
-      // 3. Настройка UI:
-      // Устанавливаем основной цвет и цвет текста из темы Telegram
-      document.body.style.backgroundColor = tg.themeParams.bg_color || '#0B0F15';
-      document.body.style.color = tg.themeParams.text_color || '#FFFFFF';
-      
-      // Включаем виброотклик при нажатии
-      tg.HapticFeedback.impactOccurred('light');
+      // ✅ ИСПРАВЛЕНИЕ: Проверка наличия Telegram объекта (для запуска в браузере)
+      if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
+        tg = window.Telegram.WebApp;
+        
+        // Стандартная инициализация SDK
+        tg.ready();
 
-      // Настройка кнопки (MainButton)
-      tg.MainButton.setParams({
-        text_color: tg.themeParams.button_text_color || '#ffffff',
-        color: tg.themeParams.button_color || '#8850ff',
-      });
+        // Настройка UI
+        document.body.style.backgroundColor = tg.themeParams.bg_color || '#1e1e2d';
+        
+        // Проверка наличия функций перед вызовом
+        if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
+           tg.HapticFeedback.impactOccurred('light');
+        }
 
-      // Скрываем навигационную кнопку "назад"
-      tg.BackButton.hide();
+        if (tg.MainButton && tg.MainButton.setParams) {
+          tg.MainButton.setParams({
+            text_color: tg.themeParams.button_text_color || '#ffffff',
+            color: tg.themeParams.button_color || '#8850ff',
+          });
+        }
+        
+        if (tg.BackButton && tg.BackButton.hide) {
+           tg.BackButton.hide();
+        }
 
-      setIsSdkInitialized(true);
+        setIsSdkInitialized(true);
+      } else {
+        // Fallback для браузера (без Telegram)
+        console.warn('Telegram WebApp SDK not available - running in browser mode');
+        document.body.style.backgroundColor = '#0B0F15'; // Запасной цвет из tailwind.config.js
+        setIsSdkInitialized(true);
+      }
     } catch (e) {
-      // Если это не Telegram (например, локальная разработка)
       console.error("Telegram WebApp SDK failed to initialize:", e.message);
-      setIsSdkInitialized(true); 
+      setIsSdkInitialized(true); // Продолжаем без SDK
     } finally {
       setIsReady(true);
     }
-  }, []);
+  }, []); // Пустой массив зависимостей гарантирует вызов только один раз при монтировании
 
   if (!isReady) {
     return (
@@ -53,7 +60,7 @@ const Layout = ({ children }) => {
     );
   }
 
-  // Оборачиваем дочерние элементы в провайдер плеера
+  // Оборачиваем дочерние элементы в PlayerProvider
   return (
     <PlayerProvider>
       <div className="min-h-screen p-4 flex flex-col items-center bg-bg-default transition-colors duration-300">
