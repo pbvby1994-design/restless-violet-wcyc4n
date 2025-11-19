@@ -1,51 +1,77 @@
-// lib/firebase.js
-// STUB — временная заглушка, безопасна для server-side сборки и для разработки.
-// Экспортирует минимальный набор функций, которые ожидает приложение.
-// Когда настроишь Firebase — заменишь это на реальную реализацию.
+// Файл: webapp/lib/firebase.js
 
-const isClient = typeof window !== 'undefined';
+// 🔥 Заглушки (Stubs) для Firebase для обеспечения успешной сборки Next.js.
+// Эти функции имитируют Firebase Firestore и Auth, чтобы компоненты, которые
+// их используют, не вызывали ошибок в процессе сборки.
 
-function notInitializedWarning(name) {
-  return () => {
-    console.warn(`[firebase-stub] called ${name} — Firebase не настроен. Возвращаю заглушку.`);
-    // для getDocs/запросов возвращаем пустой результат/промис
-    if (name === 'getDocs' || name === 'fetchCollection') return Promise.resolve([]);
-    return Promise.resolve(null);
+export function initializeFirebase() {
+  console.warn("Firebase stub: not initialized.");
+  return null;
+}
+
+export function getFirestore() {
+  console.warn("Firestore stub: no DB instance.");
+  // Возвращаем объект, имитирующий DB
+  return {
+    collection: () => ({}),
+    doc: () => ({}),
   };
 }
 
-// Экспортируем "имена", которые использует проект.
-// Подстрой под то, что реально импортируешь в коде.
-export const db = null;
-export const auth = null;
-export const getPrivateCollectionPath = () => null;
-export const currentUserId = () => null;
+// Заглушки для функций Firestore, используемых в приложении
+export function saveToFirestore(_, __) {
+  console.warn("Firestore stub: save ignored.");
+  return null;
+}
 
-// Функции Firestore-API (заглушки)
-export const doc = () => null;
-export const setDoc = notInitializedWarning('setDoc');
-export const collection = () => null;
-export const onSnapshot = () => {
-  // возвращаем функцию отписки
-  return () => {};
-};
-export const query = () => null;
-export const where = () => null;
-export const updateDoc = notInitializedWarning('updateDoc');
-export const deleteDoc = notInitializedWarning('deleteDoc');
-export const serverTimestamp = () => new Date();
-export const getDocs = notInitializedWarning('getDocs');
-
-// Доп. хелперы
-export async function fetchCollection(collectionPath) {
-  console.warn(`[firebase-stub] fetchCollection(${collectionPath}) — Firebase не настроен.`);
+export function loadFromFirestore() {
+  console.warn("Firestore stub: returning empty list.");
   return [];
 }
 
-// Если хочешь — возможность динамически включать реальную инициализацию на клиенте:
-// (например, когда в дальнейшем будешь хранить конфиг в localStorage или получать от сервера)
-export async function initializeFirebaseIfAvailable() {
-  if (!isClient) return;
-  // noop for stub
-  console.warn('[firebase-stub] initializeFirebaseIfAvailable called — заглушка.');
+// 🔥 Основные экспорты, которые используются в контексте и компонентах
+export const db = getFirestore();
+export const auth = null;
+export const currentUserId = "stub-user-id";
+export const getPrivateCollectionPath = (collectionName) => `stub/path/${collectionName}`;
+
+// Экспортируем заглушки Firestore для модулей, которые их используют
+export const doc = () => null;
+export const setDoc = () => Promise.resolve();
+export const collection = () => null;
+
+/**
+ * Заглушка для onSnapshot. Имитирует получение данных и возвращает функцию отписки.
+ * @param {any} ref - Ссылка на коллекцию или документ.
+ * @param {(snapshot: any) => void} callback - Функция обратного вызова.
+ */
+export const onSnapshot = (ref, callback) => {
+    console.warn("Firestore stub: onSnapshot called. Returning unsubscribe function.");
+    // Имитация первоначального пустого снапшота через 100мс
+    setTimeout(() => callback({ empty: true, docs: [], docChanges: () => [] }), 100);
+    // Возвращаем функцию отписки
+    return () => console.log("Firestore stub: unsubscribe called.");
+};
+
+export const query = () => null;
+export const where = () => null;
+export const updateDoc = () => Promise.resolve();
+export const deleteDoc = () => Promise.resolve();
+export const serverTimestamp = () => new Date();
+
+/**
+ * Заглушка для getDocs. Имитирует получение пустого списка документов.
+ */
+export const getDocs = () => Promise.resolve({ 
+  docs: [], 
+  empty: true,
+  forEach: () => {} // Добавляем forEach для совместимости
+});
+
+export const addDoc = () => Promise.resolve({ id: 'stub-id' });
+
+// Также экспортируем initializeAuth, так как оно может быть вызвано в контексте
+export function initializeAuth() {
+    console.warn("Auth stub: initialization skipped.");
+    return Promise.resolve("stub-user-id");
 }
