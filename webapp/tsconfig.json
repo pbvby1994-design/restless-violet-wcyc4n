@@ -16,17 +16,11 @@
     
     // Настройки для Next.js и React
     "jsx": "preserve",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    // *** ИСПРАВЛЕНИЕ: Алиас `@/` теперь указывает на корневую папку `webapp/` ***
-    "paths": {
-      "@/*": ["./*"] 
-    }
+    "incremental": true
+    
+    // *** ПУТИ АЛИАСОВ УДАЛЕНЫ ***
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  // Включаем файлы JavaScript и TypeScript, которые использует Next.js
+  "include": ["next-env.d.ts", "**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }
