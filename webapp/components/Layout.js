@@ -1,72 +1,78 @@
-// Файл: webapp/components/Layout.js
-import { useEffect, useState } from 'react';
-import WebApp from '@twa-dev/sdk'; // Импорт для типов (опционально)
+import { useEffect, useState, useMemo } from 'react';
+import { init } from '@twa-dev/sdk'; 
 import { PlayerProvider } from '../context/PlayerContext';
+import { Settings } from 'lucide-react'; // Для заглушки в случае ошибки/загрузки
 
+/**
+ * Компонент Layout:
+ * 1. Инициализирует Telegram WebApp SDK.
+ * 2. Устанавливает начальные параметры UI (цвет фона, MainButton).
+ * 3. Обеспечивает глобальный контекст для аудиоплеера (PlayerProvider).
+ * 4. Отображает экран загрузки, пока SDK не инициализирован.
+ * * NOTE: Компонент динамически импортируется в pages/index.js с ssr: false.
+ */
 const Layout = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
-  // Состояние для отслеживания инициализации SDK (в основном для отладки)
-  const [isSdkInitialized, setIsSdkInitialized] = useState(false); 
+  const [isSdkInitialized, setIsSdkInitialized] = useState(false);
 
+  // Инициализация SDK и настройка TWA UI
   useEffect(() => {
     let tg;
     try {
-      // ✅ ИСПРАВЛЕНИЕ: Проверка наличия Telegram объекта (для запуска в браузере)
-      if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
-        tg = window.Telegram.WebApp;
-        
-        // Стандартная инициализация SDK
-        tg.ready();
+      // 1. Инициализация SDK
+      init(); 
+      tg = window.Telegram.WebApp; 
+      
+      // 2. Настройка UI:
+      // Устанавливаем основной цвет (fallback на цвет из Tailwind)
+      document.body.style.backgroundColor = tg.themeParams.bg_color || '#0B0F15';
+      
+      // Настраиваем MainButton (она не будет видна, но ее параметры важны для темы)
+      tg.MainButton.setParams({
+        text_color: tg.themeParams.button_text_color || '#ffffff',
+        color: tg.themeParams.button_color || '#8850ff',
+      });
 
-        // Настройка UI
-        document.body.style.backgroundColor = tg.themeParams.bg_color || '#1e1e2d';
-        
-        // Проверка наличия функций перед вызовом
-        if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
-           tg.HapticFeedback.impactOccurred('light');
-        }
-
-        if (tg.MainButton && tg.MainButton.setParams) {
-          tg.MainButton.setParams({
-            text_color: tg.themeParams.button_text_color || '#ffffff',
-            color: tg.themeParams.button_color || '#8850ff',
-          });
-        }
-        
-        if (tg.BackButton && tg.BackButton.hide) {
-           tg.BackButton.hide();
-        }
-
-        setIsSdkInitialized(true);
-      } else {
-        // Fallback для браузера (без Telegram)
-        console.warn('Telegram WebApp SDK not available - running in browser mode');
-        document.body.style.backgroundColor = '#0B0F15'; // Запасной цвет из tailwind.config.js
-        setIsSdkInitialized(true);
+      // Скрываем навигационную кнопку "назад" (она нам не нужна на главной странице)
+      tg.BackButton.hide();
+      
+      // Включаем виброотклик для лучшего UX
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('light');
       }
-    } catch (e) {
-      console.error("Telegram WebApp SDK failed to initialize:", e.message);
-      setIsSdkInitialized(true); // Продолжаем без SDK
-    } finally {
-      setIsReady(true);
-    }
-  }, []); // Пустой массив зависимостей гарантирует вызов только один раз при монтировании
 
+      setIsSdkInitialized(true);
+    } catch (e) {
+      // Если это не Telegram, или ошибка инициализации
+      console.error("Telegram WebApp SDK failed to initialize:", e.message);
+      setIsSdkInitialized(true); // Все равно продолжаем работу, но без TWA функций
+    } finally {
+      setIsReady(true); // Приложение готово к отображению контента
+    }
+  }, []);
+
+  // Экран загрузки
   if (!isReady) {
     return (
-      <div className="flex justify-center items-center h-screen text-lg bg-bg-default text-txt-primary">
-        Загрузка приложения...
+      <div className="flex flex-col justify-center items-center h-screen bg-bg-default text-txt-primary">
+        <Settings size={32} className="animate-spin text-accent-neon mb-4"/>
+        <p className="text-lg">
+          Загрузка приложения...
+        </p>
       </div>
     );
   }
 
-  // Оборачиваем дочерние элементы в PlayerProvider
+  // Основная разметка приложения
   return (
+    // Оборачиваем все в PlayerProvider для доступа к состоянию плеера из любого места
     <PlayerProvider>
-      <div className="min-h-screen p-4 flex flex-col items-center bg-bg-default transition-colors duration-300">
-        <div className="w-full max-w-lg">
-          {children}
-        </div>
+      {/* Корневой контейнер. Класс 'min-h-screen' гарантирует, 
+        что он занимает всю высоту, а 'mx-auto' центрирует контент. 
+      */}
+      <div className="relative min-h-screen w-full mx-auto max-w-md bg-bg-default text-txt-primary">
+        {/* Рендерим дочерние элементы (страницы) */}
+        {children}
       </div>
     </PlayerProvider>
   );
