@@ -316,4 +316,3 @@ const Home = () => {
 };
 
 export default Home;
-```eof
