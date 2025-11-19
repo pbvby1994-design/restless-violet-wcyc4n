@@ -17,7 +17,7 @@
       },
       {
         "src": "/(.*)",
-        "dest": "webapp/$1"
+        "dest": "/webapp/$1"
       }
     ]
 }
