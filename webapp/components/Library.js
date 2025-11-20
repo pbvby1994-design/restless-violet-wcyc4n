@@ -1,17 +1,14 @@
 // Файл: webapp/components/Library.js
 import React, { useState, useEffect, useCallback } from 'react';
-import { getFirestore, collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
-import { getAuth, signInWithCustomToken, signInAnonymously } from 'firebase/auth';
+// ✅ ИСПРАВЛЕНИЕ 1.1: Используем импорты из новых, логически корректных контекстов
+import { useAuth } from '@/context/AuthContext'; // Для DB и Auth ID
+import { usePlayer } from '@/context/PlayerContext'; // Для управления плеером
+
+// Удаляем ненужные импорты Firebase, так как все берется из AuthContext
+import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore'; 
 import { Trash2, Loader2, Play, StopCircle } from 'lucide-react';
-import { usePlayer } from '@/context/PlayerContext';
-import { initializeApp } from 'firebase/app';
 
-// Инициализация глобальных переменных
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-// Функция для форматирования даты
+// Функция для форматирования даты 
 const formatDate = (timestamp) => {
     if (!timestamp || !timestamp.toDate) return 'Неизвестная дата';
     const date = timestamp.toDate();
@@ -25,186 +22,152 @@ const formatDate = (timestamp) => {
 };
 
 const Library = () => {
-    const { currentText, isPlaying, playSpeech, stopSpeech } = usePlayer();
+    const { currentAudioUrl, isPlaying, playSpeech, stopSpeech } = usePlayer();
+    // ✅ ИСПРАВЛЕНИЕ 1.1: Получаем все нужные данные из useAuth
+    const { db, userId, isAuthReady } = useAuth(); 
     
-    const [db, setDb] = useState(null);
-    const [auth, setAuth] = useState(null);
-    const [userId, setUserId] = useState(null);
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    
-    const [recordings, setRecordings] = useState([]);
+    const [records, setRecords] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // 1. Инициализация Firebase и Аутентификация
+    // useEffect для подписки на Firestore
     useEffect(() => {
-        if (!firebaseConfig) {
-            setError('Ошибка: Конфигурация Firebase не найдена.');
-            setIsLoading(false);
+        // Загрузка только если DB и Auth готовы
+        if (!db || !userId || !isAuthReady) {
+            if (isAuthReady && !db) {
+                setError("Ошибка инициализации базы данных. Проверьте конфигурацию Firebase.");
+            }
             return;
         }
 
-        try {
-            const app = initializeApp(firebaseConfig);
-            const firestoreDb = getFirestore(app);
-            const firebaseAuth = getAuth(app);
-            
-            setDb(firestoreDb);
-            setAuth(firebaseAuth);
+        const q = query(
+            collection(db, `users/${userId}/library`), // Коллекция в пути, привязанном к пользователю
+            // orderBy("createdAt", "desc"), 
+        );
 
-            // Аутентификация
-            const authenticate = async () => {
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(firebaseAuth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(firebaseAuth);
-                    }
-                } catch (e) {
-                    console.error("Ошибка аутентификации:", e);
-                    // Продолжаем с анонимным пользователем, если кастомный токен не сработал
-                    await signInAnonymously(firebaseAuth); 
-                }
-            };
-            
-            // Наблюдатель состояния аутентификации
-            const unsubscribe = firebaseAuth.onAuthStateChanged(user => {
-                if (user) {
-                    setUserId(user.uid);
-                } else {
-                    // Если нет пользователя (что маловероятно после signIn), используем рандомный ID
-                    setUserId(crypto.randomUUID());
-                }
-                setIsAuthReady(true);
-            });
-
-            authenticate();
-            return () => unsubscribe(); // Очистка слушателя при размонтировании
-        } catch (e) {
-            console.error("Ошибка инициализации Firebase:", e);
-            setError(`Ошибка инициализации Firebase: ${e.message}`);
-            setIsLoading(false);
-        }
-    }, [firebaseConfig, initialAuthToken]);
-
-    // 2. Загрузка данных (onSnapshot)
-    useEffect(() => {
-        if (!isAuthReady || !db || !userId) {
-            // Ждем завершения аутентификации
-            return; 
-        }
-
-        // Коллекция для публичных записей
-        // Путь: /artifacts/{appId}/public/data/recordings
-        const collectionPath = `/artifacts/${appId}/public/data/recordings`;
-        const recordingsCol = collection(db, collectionPath);
-        
-        // ВАЖНО: Мы избегаем orderBy() в запросе Firestore и сортируем на клиенте.
-        const q = query(recordingsCol);
-
-        // Наблюдатель в реальном времени
+        // Подписка на изменения в реальном времени
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedRecordings = snapshot.docs.map(document => ({
-                id: document.id,
-                ...document.data()
+            const fetchedRecords = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
             }));
-
-            // Сортировка на клиенте по полю 'createdAt' в обратном порядке
-            fetchedRecordings.sort((a, b) => {
-                const dateA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
-                const dateB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
-                return dateB - dateA; // Сначала новые
-            });
-
-            setRecordings(fetchedRecordings);
+            setRecords(fetchedRecords);
             setIsLoading(false);
+            setError(null);
         }, (err) => {
-            console.error("Ошибка при получении записей:", err);
-            setError(`Не удалось загрузить библиотеку: ${err.message}`);
+            console.error("Firestore snapshot error:", err);
+            setError("Не удалось загрузить библиотеку.");
             setIsLoading(false);
         });
 
-        return () => unsubscribe(); // Очистка слушателя при размонтировании
-    }, [isAuthReady, db, userId]);
+        return () => unsubscribe();
+    }, [db, userId, isAuthReady]); 
 
-    // Обработчик удаления
+
+    // Обработчик удаления записи
     const handleDelete = useCallback(async (id, recordUserId) => {
-        if (!db || !userId || recordUserId !== userId) {
-            console.error("Недостаточно прав для удаления. Только владелец может удалить запись.");
-            return; 
+        if (recordUserId !== userId) {
+            alert("Вы можете удалять только свои записи.");
+            return;
+        }
+        
+        if (!db) {
+            setError("База данных не инициализирована.");
+            return;
         }
 
+        // TODO: ПРИОРИТЕТ 2.4 - Здесь также нужно удалить аудиофайл из Firebase Storage.
+
         try {
-            const docRef = doc(db, `/artifacts/${appId}/public/data/recordings`, id);
-            await deleteDoc(docRef);
+            await deleteDoc(doc(db, `users/${userId}/library`, id));
         } catch (e) {
-            console.error("Ошибка удаления:", e);
-            setError(`Не удалось удалить запись: ${e.message}`);
+            console.error("Error removing document: ", e);
+            setError("Не удалось удалить запись.");
         }
     }, [db, userId]);
 
-    // Отображение состояния загрузки
+
+    // Обработчик нажатия на кнопку Play в карточке
+    const handlePlayPause = useCallback((record) => {
+        const url = record.audioUrl;
+        const isCurrent = currentAudioUrl === url;
+
+        if (isCurrent && isPlaying) {
+            stopSpeech();
+        } else if (url) {
+            playSpeech(url); 
+        }
+    }, [currentAudioUrl, isPlaying, playSpeech, stopSpeech]);
+
+
     if (isLoading) {
         return (
-            <div className="card-glass flex justify-center items-center h-48">
+            <div className="flex justify-center items-center h-48">
                 <Loader2 className="animate-spin h-8 w-8 text-accent-neon" />
-                <span className="ml-3 text-txt-secondary">Загрузка библиотеки...</span>
+                <p className="ml-3 text-txt-secondary">Загрузка библиотеки...</p>
             </div>
         );
     }
 
-    // Отображение состояния ошибки
     if (error) {
         return (
-            <div className="card-glass p-4 bg-red-900/50 text-red-300 border border-red-500 rounded-lg">
-                <h3 className="font-bold">Ошибка</h3>
-                <p>{error}</p>
+            <div className="p-4 bg-red-800/50 text-red-300 border border-red-500 rounded-lg">
+                <p>Критическая ошибка: {error}</p>
+            </div>
+        );
+    }
+
+    if (records.length === 0) {
+        return (
+            <div className="p-4 text-center rounded-xl bg-bg-glass border border-white/5">
+                <p className="text-lg font-semibold text-txt-primary">Библиотека пуста</p>
+                <p className="text-txt-secondary mt-1">Перейдите в "Генератор речи", чтобы создать первую запись.</p>
             </div>
         );
     }
     
-    // Основной рендер
     return (
-        <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-txt-primary">Библиотека Сохраненных Аудио</h2>
-            <p className="text-txt-secondary text-sm">Здесь отображаются все публичные записи, созданные пользователями. (Ваш ID: <span className="text-accent-neon font-mono break-all">{userId || 'N/A'}</span>)</p>
+        <div className="pt-2 pb-4">
+            <h2 className="text-2xl font-bold mb-4 text-txt-primary">Мои записи</h2>
 
-            {recordings.length === 0 ? (
-                <div className="card-glass text-center p-8 text-txt-secondary">
-                    <p>Библиотека пуста. Создайте аудио в разделе "Генератор речи", чтобы добавить его сюда.</p>
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {recordings.map((record) => {
-                        const isCurrent = record.text === currentText;
-                        const isOwner = record.userId === userId;
-                        
+            {records.length > 0 && (
+                <div className="space-y-4">
+                    {records.map((record) => {
+                        const isCurrent = currentAudioUrl === record.audioUrl;
+                        const isOwner = record.userId === userId; 
+
                         return (
-                            <div key={record.id} className="card-glass flex justify-between items-start space-x-4">
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-txt-primary truncate">
-                                        {record.text}
+                            <div 
+                                key={record.id} 
+                                className={`
+                                    flex items-center justify-between p-3 rounded-xl card-glass border transition-all duration-300
+                                    ${isCurrent ? 'border-accent-neon shadow-neon-light/50' : 'border-white/5'}
+                                `}
+                            >
+                                {/* Информация о записи */}
+                                <div className="flex flex-col min-w-0 flex-grow mr-4">
+                                    <p className={`font-semibold text-txt-primary truncate ${isCurrent ? 'text-accent-neon' : ''}`}>
+                                        {/* Используем первые 50 символов как название */}
+                                        {record.text ? record.text.substring(0, 50) + (record.text.length > 50 ? '...' : '') : 'Без названия'}
                                     </p>
-                                    <div className="text-xs text-txt-secondary mt-1 space-y-0.5">
-                                        <p>Создан: {formatDate(record.createdAt)}</p>
-                                        <p>Пользователь: <span className="font-mono text-txt-muted/70 break-all">{record.userId}</span></p>
-                                    </div>
+                                    <p className="text-xs text-txt-secondary mt-0.5">
+                                        Дата: {formatDate(record.createdAt)} 
+                                        {/* TODO: Добавить длительность записи (Приоритет 2) */}
+                                    </p>
                                 </div>
 
-                                <div className="flex space-x-2 items-center flex-shrink-0">
+                                {/* Кнопки управления */}
+                                <div className="flex items-center space-x-2 flex-shrink-0">
                                     {/* Кнопка Воспроизведения/Остановки */}
-                                    <button 
+                                    <button
                                         className={`p-2 rounded-full transition-colors duration-200 ${
                                             isCurrent && isPlaying 
-                                                ? 'bg-red-500 text-white hover:bg-red-600'
-                                                : 'bg-accent-neon/20 text-accent-neon hover:bg-accent-neon/40'
+                                                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/40' 
+                                                : 'bg-accent-neon/20 text-accent-neon hover:bg-accent-neon/30'
                                         }`}
-                                        onClick={() => {
-                                            if (isCurrent && isPlaying) {
-                                                stopSpeech();
-                                            } else {
-                                                playSpeech(record.audioUrl, record.text);
-                                            }
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handlePlayPause(record);
                                         }}
                                         title={isCurrent && isPlaying ? "Остановить" : "Воспроизвести"}
                                     >
