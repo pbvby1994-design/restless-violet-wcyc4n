@@ -5,7 +5,7 @@ import WebApp from '@twa-dev/sdk';
 import Header from './Header';
 import Footer from './Footer';
 // ✅ ИСПРАВЛЕНИЕ 1.1: Импортируем useAuth для данных TWA/Auth
-import { useAuth } from '@/context/AuthContext';
+import { usePlayer } from '@/context/PlayerContext';;
 
 /**
  * Компонент макета, который оборачивает все приложение,
@@ -55,3 +55,4 @@ const Layout = ({ children }) => {
 };
 
 export default Layout;
+
