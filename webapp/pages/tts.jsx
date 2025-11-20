@@ -24,7 +24,6 @@ const writeString = (view, offset, string) => {
 };
 
 const pcmToWav = (pcmData, sampleRate) => {
-    // [... (функции pcmToWav и writeString остались прежними)]
     const numChannels = 1;
     const bitsPerSample = 16;
     const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
@@ -140,9 +139,7 @@ const generateAudio = async (text, setAudioUrl, setIsLoading, setError) => {
 };
 
 // --- Web Speech API для STT (Преобразование речи в текст) ---
-
-// Получаем совместимый объект SpeechRecognition
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Инициализация перенесена в useEffect, чтобы избежать ошибки "window is not defined".
 
 const SpeechUtilityApp = () => {
     // Состояние для TTS (Text-to-Speech)
@@ -155,30 +152,38 @@ const SpeechUtilityApp = () => {
     const [sttText, setSttText] = useState("");
     const [isListening, setIsListening] = useState(false);
     const [sttError, setSttError] = useState(null);
+    
+    // Рефы для хранения конструктора и экземпляра, доступных только в браузере
     const recognitionRef = useRef(null);
+    const SpeechRecognitionConstructorRef = useRef(null); 
 
-    // Инициализация Web Speech API
+    // Инициализация Web Speech API (выполняется только на стороне клиента)
     useEffect(() => {
-        if (SpeechRecognition) {
+        // Проверка наличия объекта window (исключает SSR)
+        if (typeof window !== 'undefined') {
+            // Безопасное получение конструктора
+            SpeechRecognitionConstructorRef.current = window.SpeechRecognition || window.webkitSpeechRecognition;
+        }
+
+        if (SpeechRecognitionConstructorRef.current) {
+            const SpeechRecognition = SpeechRecognitionConstructorRef.current;
             const recognition = new SpeechRecognition();
-            recognition.continuous = false; // Останавливается после паузы
-            recognition.interimResults = true; // Отображение промежуточных результатов
-            recognition.lang = 'ru-RU'; // Указываем русский язык для лучшей пунктуации
+            
+            recognition.continuous = false; 
+            recognition.interimResults = true; 
+            recognition.lang = 'ru-RU'; 
             
             recognition.onresult = (event) => {
                 let finalTranscript = '';
-                let interimTranscript = '';
-                
+                // Собираем весь распознанный текст
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        finalTranscript += transcript + ' ';
-                    } else {
-                        interimTranscript += transcript;
+                        finalTranscript += event.results[i][0].transcript + ' ';
                     }
                 }
-                // Используем finalTranscript в поле sttText
+                
                 if (finalTranscript.trim()) {
+                    // Обновляем текст только финальными результатами
                     setSttText(prev => prev + finalTranscript);
                 }
             };
@@ -198,19 +203,24 @@ const SpeechUtilityApp = () => {
             setSttError("Ваш браузер не поддерживает Web Speech API для STT.");
         }
 
+        // Очистка при размонтировании
         return () => {
             if (recognitionRef.current) {
                 recognitionRef.current.stop();
             }
         };
-    }, []);
+    }, []); // Запускается один раз при монтировании компонента
 
     const startListening = () => {
+        if (!SpeechRecognitionConstructorRef.current) {
+            setSttError("STT недоступен в этом браузере.");
+            return;
+        }
         if (recognitionRef.current && !isListening) {
             setSttError(null);
-            // Если предыдущий текст не был скопирован, добавляем разделитель
-            if (sttText.trim() && !sttText.endsWith('.') && !sttText.endsWith(' ') && !sttText.endsWith('!')) {
-                 setSttText(prev => prev + '. ');
+            // Добавляем пробел, чтобы новый распознанный текст не прилипал к старому
+            if (sttText.trim() && !sttText.endsWith(' ')) {
+                 setSttText(prev => prev + ' ');
             }
             setIsListening(true);
             recognitionRef.current.start();
@@ -232,10 +242,15 @@ const SpeechUtilityApp = () => {
         generateAudio(ttsText, setAudioUrl, setIsTtsLoading, setTtsError);
     }, [ttsText]);
 
+    // Копирование текста (Используем console.log вместо alert)
     const handleCopyText = () => {
-        navigator.clipboard.writeText(sttText)
-            .then(() => alert('Текст скопирован!')) // В идеале использовать кастомный UI
-            .catch(err => console.error('Ошибка копирования:', err));
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(sttText)
+                .then(() => console.log('Текст скопирован!')) 
+                .catch(err => console.error('Ошибка копирования:', err));
+        } else {
+            console.error('API буфера обмена недоступен.');
+        }
     };
 
 
@@ -260,15 +275,15 @@ const SpeechUtilityApp = () => {
                         value={sttText}
                         onChange={(e) => setSttText(e.target.value)}
                         placeholder="Распознанный текст появится здесь..."
-                        // При записи пользователь не должен редактировать текст, чтобы не мешать onresult
+                        // При записи пользователь не должен редактировать текст
                         disabled={isListening} 
                     />
                     
-                    {/* Кнопка записи */}
+                    {/* Кнопки записи и очистки */}
                     <div className="flex space-x-3">
                         <button
                             onClick={isListening ? stopListening : startListening}
-                            disabled={!SpeechRecognition || isListening && !recognitionRef.current}
+                            disabled={!SpeechRecognitionConstructorRef.current}
                             className={`flex-1 flex justify-center items-center px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
                                 isListening 
                                     ? 'bg-red-700 hover:bg-red-600 shadow-neon-red animate-pulse' 
@@ -368,7 +383,7 @@ const SpeechUtilityApp = () => {
             </div>
             
             <footer className="mt-8 text-xs text-txt-muted text-center max-w-lg">
-                <p>Функция "Речь в Текст" использует Web Speech API вашего браузера. Точность распознавания и пунктуация могут варьироваться.</p>
+                <p>Функция "Речь в Текст" теперь инициализируется только на клиенте, чтобы избежать ошибок сборки Next.js.</p>
             </footer>
         </div>
     );
