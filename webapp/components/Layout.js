@@ -1,27 +1,30 @@
 // Файл: webapp/components/Layout.js
-import { useEffect } from 'react';
-import WebApp from '@twa-dev/sdk'; // Импорт TWA SDK
-import Header from './Header'; // Импорт Header
-import Footer from './Footer'; // Импорт Footer
+import React, { useEffect } from 'react';
+import WebApp from '@twa-dev/sdk';
+import Header from './Header';
+import Footer from './Footer';
 import { usePlayer } from '@/context/PlayerContext';
 
 /**
- * Основной компонент-обертка для макета приложения.
- * Инициализирует Telegram WebApp SDK и управляет основными стилями.
+ * Компонент макета, который оборачивает все приложение,
+ * применяет стили темы Telegram и центрирует контент.
+ * * NOTE: ЭТОТ КОМПОНЕНТ РИСУЕТ ВНУТРЕННИЙ "КАРТОЧНЫЙ" КОНТЕЙНЕР ПРИЛОЖЕНИЯ.
  */
 const Layout = ({ children }) => {
-  // Получаем themeParams из контекста. Теперь он гарантированно будет объектом,
-  // что устраняет ошибку 'Cannot read properties of undefined (reading 'bg_color')'
+  // Получаем themeParams из контекста. Теперь он гарантированно будет объектом.
   const { themeParams } = usePlayer();
+  
+  // Получаем цвета из контекста. Fallback на цвета по умолчанию.
+  const bgColor = themeParams?.bg_color || '#0B0F15';
+  const headerBgColor = themeParams?.header_bg_color || '#1A1E24';
+  const textColor = themeParams?.text_color || '#FFFFFF';
 
+  // Логика установки цветов TWA SDK и расширения
   useEffect(() => {
-    // Убеждаемся, что SDK готов и раскрываем WebApp на весь экран.
     if (WebApp.initDataUnsafe) {
       WebApp.ready();
       WebApp.expand();
       
-      // Используем безопасный доступ к свойствам themeParams
-      // В PlayerContext мы уже позаботились о том, чтобы themeParams был хотя бы {}
       const mainBg = themeParams?.bg_color || '#0B0F15';
       const headerBg = themeParams?.header_bg_color || mainBg;
       
@@ -29,21 +32,32 @@ const Layout = ({ children }) => {
       WebApp.setHeaderColor(headerBg);
       WebApp.setBackgroundColor(mainBg);
     } else {
-      // Это сообщение выводится, если приложение запущено вне среды Telegram,
-      // что обычно не является ошибкой, но полезно для отладки.
       console.warn("Telegram WebApp SDK not fully initialized or not running in Telegram environment.");
     }
-  }, [themeParams]); // Зависимость от themeParams, чтобы обновить цвета при смене темы в Telegram
-
+  }, [themeParams]); 
 
   return (
-    // Класс flex-col и min-h-screen гарантируют, что футер будет внизу.
-    <div className="min-h-screen bg-bg-default text-txt-primary flex flex-col">
-      <Header />
-      <main className="flex-grow max-w-lg w-full mx-auto p-4 md:p-6 lg:p-8">
-        {children}
-      </main>
-      <Footer />
+    // Внешняя обертка: занимает весь экран и центрирует внутренний контейнер
+    <div 
+      className="min-h-screen flex items-center justify-center p-4 transition-colors duration-300"
+      style={{ backgroundColor: bgColor, color: textColor }}
+    >
+      {/* Внутренний контейнер-карточка: 
+        Применяет стили card-glass, ограничивает ширину (max-w-md),
+        использует цвет фона для хедера TWA. 
+      */}
+      <div 
+        className="w-full max-w-md card-glass backdrop-blur-lg"
+        // Используем headerBgColor для основного фона карточки,
+        // чтобы создать контраст с внешним фоном.
+        style={{ backgroundColor: headerBgColor }}
+      >
+        <Header />
+        <main className="p-4">
+            {children}
+        </main>
+        <Footer />
+      </div>
     </div>
   );
 };
