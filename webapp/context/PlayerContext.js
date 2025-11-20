@@ -1,4 +1,4 @@
-// Файл: webapp/context/PlayerContext.js
+// Файл: webapp/context/AuthContext.js (TWA SDK, Firebase, Auth)
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 // Импортируем WebApp динамически или обрабатываем его использование
 import WebApp from '@twa-dev/sdk'; 
@@ -6,7 +6,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
-// --- Глобальные переменные из среды Canvas ---
+// --- Глобальные переменные из среды Canvas (для Vercel/TMA) ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
     ? JSON.parse(__firebase_config) 
     : {};
@@ -30,54 +30,36 @@ if (Object.keys(firebaseConfig).length > 0 && typeof window !== 'undefined') {
 }
 
 // Создание контекста
-const PlayerContext = createContext({
+const AuthContext = createContext({
   textToSpeak: '',
   updateTextToSpeak: () => {},
   themeParams: {},
   isWebAppReady: false,
-  // Firestore / Auth
-  db: db || null,
-  auth: auth || null,
+  db: null,
+  auth: null,
   userId: null,
   isAuthReady: false,
-  appId: appId,
+  appId: 'default-app-id',
 });
 
-export const PlayerProvider = ({ children }) => {
+// Хук для использования контекста
+export const useAuth = () => useContext(AuthContext);
+
+// Компонент провайдера
+export const AuthProvider = ({ children }) => {
   const [textToSpeak, setTextToSpeak] = useState('');
-  // Инициализируем themeParams заглушкой, чтобы избежать ошибок SSR
-  const [themeParams, setThemeParams] = useState({});
   const [isWebAppReady, setIsWebAppReady] = useState(false);
-  
-  // Auth & Firestore State
+  const [themeParams, setThemeParams] = useState({});
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-
-  // 1. Инициализация WebApp SDK (ТОЛЬКО на клиенте)
+  // 1. Инициализация TWA SDK (ТОЛЬКО на клиенте)
   useEffect(() => {
-    if (typeof window !== 'undefined' && WebApp.initDataUnsafe) {
-      WebApp.ready();
-      WebApp.expand();
+    if (typeof window !== 'undefined' && WebApp.isReady) {
       setIsWebAppReady(true);
-      setThemeParams(WebApp.themeParams);
-
-      // Listener для смены темы
-      WebApp.onEvent('themeChanged', (newThemeParams) => {
-        setThemeParams(newThemeParams);
-      });
-
-      return () => {
-        WebApp.offEvent('themeChanged', setThemeParams);
-      };
-    } else {
-      // Имитация темы при SSR или локальном запуске без TWA
-      setThemeParams({
-        bg_color: '#0B0F15',
-        header_bg_color: '#1A1E24',
-        text_color: '#FFFFFF',
-        button_color: '#B06EFF',
-        button_text_color: '#FFFFFF'
+      setThemeParams(WebApp.themeParams || { 
+        bg_color: '#0B0F15', 
+        text_color: '#FFFFFF' 
       });
     }
   }, []);
@@ -85,9 +67,8 @@ export const PlayerProvider = ({ children }) => {
   // 2. Инициализация Firebase Auth (ТОЛЬКО на клиенте)
   useEffect(() => {
     if (typeof window === 'undefined' || !auth) {
-      // Блокируем выполнение на сервере
       if (!auth) console.warn("Firebase Auth not initialized on client.");
-      setIsAuthReady(true); // Считаем готовым для SSR/локальных тестов
+      setIsAuthReady(true);
       return;
     }
 
@@ -126,20 +107,27 @@ export const PlayerProvider = ({ children }) => {
     updateTextToSpeak,
     themeParams,
     isWebAppReady,
-    db: db,
-    auth: auth,
-    userId,
+    db: db, 
+    auth: auth, 
+    userId, 
     isAuthReady,
     appId,
   };
 
-  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const usePlayer = () => {
-  const context = useContext(PlayerContext);
-  if (context === undefined) {
-    throw new Error('usePlayer must be used within a PlayerProvider');
-  }
-  return context;
+export const useTwaData = () => {
+  console.error("useTwaData must be used within an AuthProvider.");
+  return {
+    themeParams: {},
+    isWebAppReady: false,
+    db: null,
+    auth: null,
+    userId: null,
+    isAuthReady: false,
+    appId: 'default-app-id',
+  };
 };
+
+export default AuthProvider;
