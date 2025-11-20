@@ -1,14 +1,14 @@
 // Файл: webapp/pages/library.js
+
 import { useCallback } from 'react';
-import dynamic from 'next/dynamic';
+// ✅ КЛЮЧЕВОЙ ШАГ: Импортируем dynamic для клиентской загрузки
+import dynamic from 'next/dynamic'; 
 import { useRouter } from 'next/router';
 import { usePlayer } from '../context/PlayerContext';
 import { motion } from "framer-motion";
 
-// 🛑 УДАЛЯЕМ СТАТИЧЕСКИЕ ИМПОРТЫ
-// import LibraryComponent from '../components/Library'; 
-// import PlayerControl from '../components/Player';
-
+// 🛑 УДАЛИТЬ СТАТИЧЕСКИЕ ИМПОРТЫ LibraryComponent и PlayerControl,
+// если они были вставлены автоматически или вручную.
 
 // 1. Динамический импорт Layout (из-за TWA SDK)
 const Layout = dynamic(() => import('../components/Layout'), { 
@@ -20,27 +20,30 @@ const Layout = dynamic(() => import('../components/Layout'), {
   )
 });
 
-// ✅ 2. Динамический импорт LibraryComponent (из-за Firebase)
+// ✅ 2. Динамический импорт LibraryComponent
+// (Содержит логику Firebase, которая падает на сервере)
 const LibraryComponent = dynamic(() => import('../components/Library'), {
-    ssr: false,
+    ssr: false, // <-- Отключаем SSR
     loading: () => <div className="p-4 text-center text-txt-secondary">Загрузка библиотеки...</div>
 });
 
-// ✅ 3. Динамический импорт PlayerControl (из-за Audio Player)
+// ✅ 3. Динамический импорт PlayerControl
+// (Использует usePlayer, который управляет Audio API)
 const PlayerControl = dynamic(() => import('../components/Player'), {
-    ssr: false,
+    ssr: false, // <-- Отключаем SSR
     loading: () => null
 });
 
 
 export default function LibraryPage() {
     const router = useRouter();
+    // usePlayer() в порядке, так как он использует PlayerContext, 
+    // который сам по себе динамически импортирован в _app.js.
     const { setAudioUrl, setError } = usePlayer();
     
     // Функция для воспроизведения аудио из библиотеки
     const handlePlayBook = useCallback((book) => {
         try {
-            // Аудиофайлы в библиотеке должны хранить URL
             if (book.audioUrl) {
                 setAudioUrl(book.audioUrl);
             } else {
@@ -66,15 +69,11 @@ export default function LibraryPage() {
                 &larr; На Главную
             </motion.button>
             
-            {/* Теперь этот компонент загружается только на клиенте */}
+            {/* Компоненты, которые теперь загружаются только на клиенте */}
             <LibraryComponent onPlay={handlePlayBook} />
             
-            {/* Плеер всегда отображается внизу */}
             <PlayerControl voice="Library" />
             <div className="h-20" /> {/* Отступ для плеера */}
         </Layout>
     );
 }
-
-// ПРИМЕЧАНИЕ: Поскольку эта страница не является главной, она не использует MiniPlayer,
-// а вместо него использует FullPlayer (PlayerControl). Оба требуют ssr: false.
