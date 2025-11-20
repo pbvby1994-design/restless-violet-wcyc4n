@@ -1,5 +1,6 @@
 // Файл: webapp/components/Layout.js
 import React, { useEffect } from 'react';
+// Импортируем WebApp
 import WebApp from '@twa-dev/sdk';
 import Header from './Header';
 import Footer from './Footer';
@@ -8,33 +9,28 @@ import { usePlayer } from '@/context/PlayerContext';
 /**
  * Компонент макета, который оборачивает все приложение,
  * применяет стили темы Telegram и центрирует контент.
- * * NOTE: ЭТОТ КОМПОНЕНТ РИСУЕТ ВНУТРЕННИЙ "КАРТОЧНЫЙ" КОНТЕЙНЕР ПРИЛОЖЕНИЯ.
  */
 const Layout = ({ children }) => {
-  // Получаем themeParams из контекста. Теперь он гарантированно будет объектом.
-  const { themeParams } = usePlayer();
+  // Получаем themeParams и isWebAppReady из контекста
+  const { themeParams, isWebAppReady } = usePlayer();
   
-  // Получаем цвета из контекста. Fallback на цвета по умолчанию.
+  // Используем надежные заглушки для SSR
   const bgColor = themeParams?.bg_color || '#0B0F15';
   const headerBgColor = themeParams?.header_bg_color || '#1A1E24';
   const textColor = themeParams?.text_color || '#FFFFFF';
 
-  // Логика установки цветов TWA SDK и расширения
+  // Установка цветов TWA SDK (ТОЛЬКО на клиенте и после готовности SDK)
   useEffect(() => {
-    if (WebApp.initDataUnsafe) {
-      WebApp.ready();
-      WebApp.expand();
-      
+    // Проверяем, что мы на клиенте И что WebApp SDK инициализирован
+    if (typeof window !== 'undefined' && isWebAppReady) {
       const mainBg = themeParams?.bg_color || '#0B0F15';
       const headerBg = themeParams?.header_bg_color || mainBg;
       
-      // Установка цветов, адаптированных к теме Telegram
+      // Устанавливаем цвета для нативных элементов Telegram
       WebApp.setHeaderColor(headerBg);
       WebApp.setBackgroundColor(mainBg);
-    } else {
-      console.warn("Telegram WebApp SDK not fully initialized or not running in Telegram environment.");
     }
-  }, [themeParams]); 
+  }, [isWebAppReady, themeParams]); 
 
   return (
     // Внешняя обертка: занимает весь экран и центрирует внутренний контейнер
@@ -43,17 +39,16 @@ const Layout = ({ children }) => {
       style={{ backgroundColor: bgColor, color: textColor }}
     >
       {/* Внутренний контейнер-карточка: 
-        Применяет стили card-glass, ограничивает ширину (max-w-md),
-        использует цвет фона для хедера TWA. 
+        Применяет стили card-glass, ограничивает ширину (max-w-md).
       */}
       <div 
         className="w-full max-w-md card-glass backdrop-blur-lg"
-        // Используем headerBgColor для основного фона карточки,
-        // чтобы создать контраст с внешним фоном.
+        // Используем headerBgColor для основного фона карточки
         style={{ backgroundColor: headerBgColor }}
       >
-        <Header />
-        <main className="p-4">
+        {/* Header и Footer должны существовать */}
+        <Header /> 
+        <main className="p-4 flex-grow w-full">
             {children}
         </main>
         <Footer />
