@@ -4,15 +4,16 @@ import React, { useEffect } from 'react';
 import WebApp from '@twa-dev/sdk';
 import Header from './Header';
 import Footer from './Footer';
-import { usePlayer } from '@/context/PlayerContext';
+// ✅ ИСПРАВЛЕНИЕ 1.1: Импортируем useAuth для данных TWA/Auth
+import { useAuth } from '@/context/AuthContext';
 
 /**
  * Компонент макета, который оборачивает все приложение,
  * применяет стили темы Telegram и центрирует контент.
  */
 const Layout = ({ children }) => {
-  // Получаем themeParams и isWebAppReady из контекста
-  const { themeParams, isWebAppReady } = usePlayer();
+  // ✅ ИСПРАВЛЕНИЕ 1.1: Получаем themeParams и isWebAppReady из нового AuthContext
+  const { themeParams, isWebAppReady } = useAuth();
   
   // Используем надежные заглушки для SSR
   const bgColor = themeParams?.bg_color || '#0B0F15';
@@ -38,18 +39,14 @@ const Layout = ({ children }) => {
       className="min-h-screen flex items-center justify-center p-4 transition-colors duration-300"
       style={{ backgroundColor: bgColor, color: textColor }}
     >
-      {/* Внутренний контейнер-карточка: 
-        Применяет стили card-glass, ограничивает ширину (max-w-md).
-      */}
+      {/* Внутренний контейнер-карточка */}
       <div 
         className="w-full max-w-md card-glass backdrop-blur-lg"
-        // Используем headerBgColor для основного фона карточки
         style={{ backgroundColor: headerBgColor }}
       >
-        {/* Header и Footer должны существовать */}
-        <Header /> 
+        <Header />
         <main className="p-4 flex-grow w-full">
-            {children}
+          {children}
         </main>
         <Footer />
       </div>
