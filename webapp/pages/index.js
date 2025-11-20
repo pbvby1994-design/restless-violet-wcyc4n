@@ -1,17 +1,26 @@
 // Файл: webapp/pages/index.js
 import React, { useState } from 'react';
-// 🛑 УДАЛЯЕМ: 
+// ✅ ДОБАВЛЯЕМ dynamic
+import dynamic from 'next/dynamic';
+
+// 🛑 УДАЛИТЬ СТАТИЧЕСКИЕ ИМПОРТЫ:
 // import Generator from '@/components/Generator';
 // import Library from '@/components/Library';
 // import MiniPlayer from '@/components/MiniPlayer';
 
-// ✅ ДОБАВЛЯЕМ dynamic
-import dynamic from 'next/dynamic';
-
-// ✅ ИСПРАВЛЕНИЕ: Динамический импорт с отключением SSR для компонентов, использующих браузерные API.
-const Generator = dynamic(() => import('@/components/Generator'), { ssr: false });
-const Library = dynamic(() => import('@/components/Library'), { ssr: false });
-const MiniPlayer = dynamic(() => import('@/components/MiniPlayer'), { ssr: false });
+// ✅ ИСПРАВЛЕНИЕ: Динамический импорт с отключением SSR
+const Generator = dynamic(() => import('@/components/Generator'), { 
+    ssr: false,
+    loading: () => <div className="p-4 text-center text-txt-secondary">Загрузка генератора...</div>
+});
+const Library = dynamic(() => import('@/components/Library'), { 
+    ssr: false,
+    loading: () => <div className="p-4 text-center text-txt-secondary">Загрузка библиотеки...</div>
+});
+const MiniPlayer = dynamic(() => import('@/components/MiniPlayer'), { 
+    ssr: false,
+    loading: () => null // Не показываем ничего во время загрузки, чтобы избежать мерцания
+});
 
 
 // Компоненты для навигации
@@ -63,13 +72,14 @@ const Home = () => {
                 />
             </div>
             
-            {/* 2. Отображение активного контента */}
+            {/* 2. Отображение активного контента (теперь они динамические) */}
             <div className="card-glass p-4">
                 {activeTab === 'Генератор речи' && <Generator />}
                 {activeTab === 'Библиотека' && <Library />}
             </div>
 
-            {/* 3. Мини-плеер (на клиенте) */}
+            {/* 3. Мини-плеер (теперь динамический) */}
+            {/* Размещаем его внизу с фиксированным позиционированием */}
             <div className="fixed bottom-0 left-0 right-0 z-50">
                 <MiniPlayer />
             </div>
