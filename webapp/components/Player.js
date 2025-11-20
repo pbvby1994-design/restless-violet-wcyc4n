@@ -1,3 +1,4 @@
+// Файл: webapp/components/Player.js
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, SkipBack, SkipForward, Settings, Volume2, Maximize2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
@@ -5,8 +6,6 @@ import { useState } from 'react';
 
 /**
  * Утилита для форматирования времени (секунды -> "М:СС")
- * @param {number} time - Время в секундах
- * @returns {string} Отформатированное время
  */
 const formatTime = (time) => {
   if (!time || isNaN(time) || time < 0) return "0:00";
@@ -17,9 +16,6 @@ const formatTime = (time) => {
 
 /**
  * Компонент управления аудиоплеером.
- * Фиксирован в нижней части экрана и видим только при наличии currentAudioUrl.
- * @param {object} props - Свойства компонента.
- * @param {string} props.voice - Имя текущего выбранного голоса для отображения.
  */
 export default function PlayerControl({ voice }) {
   const { 
@@ -29,7 +25,11 @@ export default function PlayerControl({ voice }) {
     currentTime, 
     duration, 
     seekTo,
-    isLoading
+    isLoading,
+    volume, 
+    playbackRate, 
+    setVolume, 
+    setPlaybackRate, 
   } = usePlayer();
   
   const [showSettings, setShowSettings] = useState(false);
@@ -39,159 +39,158 @@ export default function PlayerControl({ voice }) {
     return null;
   }
 
-  // Вычисление прогресса в процентах
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-  
-  // Эффект нажатия
+  // Обработчик перемотки (для ползунка)
+  const handleSeek = (e) => {
+    seekTo(parseFloat(e.target.value));
+  };
+
+  // Обработчики громкости и скорости (Приоритет 2.2)
+  const handleVolumeChange = (e) => {
+    setVolume(parseFloat(e.target.value));
+  };
+
+  const handlePlaybackRateChange = (e) => {
+    setPlaybackRate(parseFloat(e.target.value));
+  };
+
+
   const tapEffect = { scale: 0.95 };
 
-  // --- ОБРАБОТЧИКИ СОБЫТИЙ ДЛЯ ПОЛЗУНКА ---
-
-  // Когда пользователь начинает перетаскивать ползунок
-  const handleSeekStart = (e) => {
-    // В будущем тут можно было бы остановить автоматическое обновление currentTime
+  // Анимация для выезжающего плеера
+  const playerVariants = {
+    hidden: { y: 100, opacity: 0 },
+    visible: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 30 } },
+    exit: { y: 100, opacity: 0 }
   };
 
-  // Когда пользователь перемещает ползунок (обновляет отображаемое время)
-  const handleSeekChange = (e) => {
-    const time = parseFloat(e.target.value);
-    // Для более плавного обновления, можно обновлять только локальное состояние 
-    // во время перетаскивания, но для простоты мы сразу передаем в контекст.
-    seekTo(time);
+  // Анимация для блока настроек
+  const settingsVariants = {
+    hidden: { height: 0, opacity: 0, scaleY: 0.8 },
+    visible: { 
+      height: "auto", 
+      opacity: 1, 
+      scaleY: 1, 
+      transition: { type: "tween", duration: 0.3 } 
+    },
+    exit: { 
+      height: 0, 
+      opacity: 0, 
+      scaleY: 0.8,
+      transition: { type: "tween", duration: 0.3 } 
+    }
   };
-
-  // Когда пользователь отпускает ползунок
-  const handleSeekEnd = (e) => {
-    const time = parseFloat(e.target.value);
-    seekTo(time); // Убедимся, что финальная позиция применена
-  };
-
 
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        exit={{ y: 100 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-6 pt-2"
+        key="player-control"
+        variants={playerVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="fixed bottom-0 left-0 right-0 z-40 p-4"
       >
-        <div className="mx-auto max-w-md bg-bg-glass backdrop-blur-xl border border-white/10 rounded-3xl shadow-neon/30 p-4 transition-all duration-300">
+        <div className="max-w-md mx-auto card-glass backdrop-blur-md p-4 rounded-xl shadow-neon-lg border border-white/5">
           
-          {/* Верхняя часть: Название и Настройки */}
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-sm font-semibold text-accent-neon truncate">
-              {isLoading ? 'Генерация...' : `Аудио Голосом: ${voice}`}
-            </h3>
-            
-            {/* Кнопка Настроек */}
+          {/* 1. Заголовок и настройки */}
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold text-txt-primary truncate">
+              {voice === 'Library' ? 'Запись из Библиотеки' : 'Новая Генерация'}
+            </h2>
             <motion.button
               onClick={() => setShowSettings(!showSettings)}
               whileTap={tapEffect}
-              className={`p-1 rounded-full transition-all duration-300 ${
-                showSettings ? 'bg-accent-deep text-accent-neon' : 'text-txt-secondary hover:text-txt-primary'
+              className={`p-2 rounded-full transition-colors duration-200 ${
+                showSettings ? 'bg-accent-neon/20 text-accent-neon' : 'text-txt-secondary hover:text-white'
               }`}
+              title="Настройки плеера"
             >
-              <Settings size={18} className={showSettings ? 'rotate-90' : ''}/>
+              <Settings size={20} />
             </motion.button>
           </div>
-          
-          {/* Ползунок Прогресса */}
-          <div className="relative mb-2">
-            <input
-              type="range"
-              min="0"
+
+          {/* 2. Ползунок прогресса */}
+          <div className="relative mb-4">
+            <input 
+              type="range" 
+              min="0" 
               max={duration || 0}
-              step="0.1"
+              step="0.1" 
               value={currentTime}
-              onChange={handleSeekChange}
-              onMouseDown={handleSeekStart}
-              onTouchStart={handleSeekStart}
-              onMouseUp={handleSeekEnd}
-              onTouchEnd={handleSeekEnd}
+              onChange={handleSeek}
               className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent-neon/80"
-              style={{
-                background: `linear-gradient(to right, var(--tw-colors-accent-neon) ${progressPercent}%, #ffffff1a ${progressPercent}%)`
-              }}
-              disabled={!currentAudioUrl}
             />
-            {/* Отображение времени */}
-            <div className="flex justify-between text-xs text-txt-muted mt-1">
+            <div className="flex justify-between text-xs font-mono text-txt-secondary mt-1">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
 
-          {/* Элементы управления воспроизведением */}
-          <div className="flex items-center justify-center space-x-6 mt-4">
-            
-            {/* Кнопка Skip Back (Перемотка назад на 10 сек) */}
-            <motion.button
-              onClick={() => seekTo(currentTime - 10)}
+          {/* 3. Кнопки управления */}
+          <div className="flex items-center justify-center space-x-8">
+            <motion.button 
               whileTap={tapEffect}
-              disabled={!currentAudioUrl || isLoading}
-              className="text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-30"
+              disabled 
+              className="text-txt-secondary disabled:opacity-30 hover:text-white transition"
             >
               <SkipBack size={24} />
             </motion.button>
-
-            {/* Главная Кнопка Play/Pause */}
-            <motion.button
+            
+            {/* Главная кнопка Play/Pause */}
+            <motion.button 
               onClick={togglePlay}
-              whileTap={{ scale: 0.9 }}
-              disabled={!currentAudioUrl || isLoading}
-              className="w-14 h-14 bg-accent-neon rounded-full flex items-center justify-center shadow-lg shadow-accent-neon/50 hover:bg-accent-light transition-colors disabled:opacity-50"
+              whileTap={{ scale: 0.85 }}
+              className="w-14 h-14 rounded-full bg-accent-neon shadow-neon-lg flex items-center justify-center text-white hover:bg-accent-light transition"
             >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-t-white border-white/50 rounded-full animate-spin"></div>
-              ) : isPlaying ? (
-                <Pause size={28} fill="white" className="text-white ml-0.5" />
-              ) : (
-                <Play size={28} fill="white" className="text-white ml-1.5" />
-              )}
+              {isPlaying 
+                ? <Pause size={30} fill="white" /> 
+                : <Play size={30} fill="white" className="ml-1" />
+              }
             </motion.button>
             
-            {/* Кнопка Skip Forward (Перемотка вперед на 10 сек) */}
-            <motion.button
-              onClick={() => seekTo(currentTime + 10)}
+            <motion.button 
               whileTap={tapEffect}
-              disabled={!currentAudioUrl || isLoading}
-              className="text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-30"
+              disabled 
+              className="text-txt-secondary disabled:opacity-30 hover:text-white transition"
             >
               <SkipForward size={24} />
             </motion.button>
           </div>
 
-          {/* Панель Настроек (выдвигается) */}
+          {/* 4. Настройки скорости и громкости (Скрываемый блок) */}
           <AnimatePresence>
             {showSettings && (
               <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden pt-4 mt-4 border-t border-white/10 space-y-3"
+                key="settings-panel"
+                variants={settingsVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="mt-4 pt-4 border-t border-white/10 overflow-hidden"
+                style={{ originY: 0 }}
               >
                 <div className="space-y-3">
-                  {/* Скорость Воспроизведения (Заглушка) */}
+                  {/* Скорость Воспроизведения (Активна) */}
                   <label className="block">
                     <span className="text-sm font-medium text-txt-secondary flex justify-between">
-                       Скорость: <span>1.0x</span> 
+                       Скорость: <span>{playbackRate.toFixed(1)}x</span> 
                     </span>
-                    <input type="range" min="0.5" max="2.0" step="0.1" defaultValue="1.0" 
+                    <input type="range" min="0.5" max="2.0" step="0.1" 
+                           value={playbackRate}
+                           onChange={handlePlaybackRateChange} // ✅ ИСПРАВЛЕНИЕ: Логика теперь активна
                            className="mt-1 w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent-neon/80" 
-                           disabled // Логика скорости пока не реализована в PlayerContext
                     />
                   </label>
                   
-                  {/* Громкость (Заглушка) */}
+                  {/* Громкость (Активна) */}
                   <label className="block">
                     <span className="text-sm font-medium text-txt-secondary flex justify-between">
-                       Громкость: <Volume2 size={16}/>
+                       Громкость: <span>{Math.round(volume * 100)}%</span>
                     </span>
-                    <input type="range" min="0" max="1" step="0.1" defaultValue="1.0" 
+                    <input type="range" min="0" max="1" step="0.01" 
+                           value={volume}
+                           onChange={handleVolumeChange} // ✅ ИСПРАВЛЕНИЕ: Логика теперь активна
                            className="mt-1 w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-accent-neon/80"
-                           disabled // Логика громкости пока не реализована в PlayerContext
                     />
                   </label>
                 </div>
