@@ -1,12 +1,12 @@
-// Файл: webapp/pages/library.js (ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ)
+// Файл: webapp/pages/library.js (Чистая и правильная версия)
 
-import dynamic from 'next/dynamic';
+import { useCallback } from 'react';
+import dynamic from 'next/dynamic'; // ✅ Ключевой импорт
 import { useRouter } from 'next/router';
+// ✅ Статический импорт usePlayer в порядке, т.к. Layout (родитель) сделан dynamic
+import { usePlayer } from '../context/PlayerContext'; 
 import { motion } from "framer-motion";
 
-// 🛑 УБРАТЬ: import { usePlayer } from '../context/PlayerContext'; 
-// 🛑 УБРАТЬ: import LibraryComponent from '../components/Library'; 
-// 🛑 УБРАТЬ: import PlayerControl from '../components/Player';
 
 // 1. Динамический импорт Layout (из-за TWA SDK)
 const Layout = dynamic(() => import('../components/Layout'), { 
@@ -18,65 +18,42 @@ const Layout = dynamic(() => import('../components/Layout'), {
   )
 });
 
-// =========================================================================
-// ✅ 2. НОВЫЙ КОМПОНЕНТ-ОБЕРТКА
-// Он инкапсулирует всю клиентскую логику (usePlayer, LibraryComponent, PlayerControl)
-// и гарантирует, что она не будет выполнена на сервере.
-const ClientLibraryWrapper = dynamic(
-    async () => {
-        // Импортируем все клиентские зависимости внутри dynamic()
-        const { usePlayer } = await import('../context/PlayerContext');
-        const LibraryComponent = await import('../components/Library');
-        const PlayerControl = await import('../components/Player');
-        
-        // Возвращаем основной компонент страницы
-        const LibraryContent = () => {
-            const { setAudioUrl, setError } = usePlayer();
-            const tapEffect = { scale: 0.95 };
+// ✅ 2. Динамический импорт LibraryComponent (Из-за Firebase)
+const LibraryComponent = dynamic(() => import('../components/Library'), {
+    ssr: false, // Отключаем SSR
+    loading: () => <div className="p-4 text-center text-txt-secondary">Загрузка библиотеки...</div>
+});
 
-            // Функция для воспроизведения аудио из библиотеки
-            const handlePlayBook = (book) => {
-                try {
-                    if (book.audioUrl) {
-                        setAudioUrl(book.audioUrl);
-                    } else {
-                        setError("Аудиофайл не найден в записи.");
-                    }
-                } catch (e) {
-                    console.error("Failed to play book:", e);
-                    setError("Не удалось начать воспроизведение.");
-                }
-            };
-
-            return (
-                <>
-                    {/* LibraryComponent загружается и использует Firebase только на клиенте */}
-                    <LibraryComponent.default onPlay={handlePlayBook} />
-                    
-                    {/* PlayerControl загружается и использует Audio API только на клиенте */}
-                    <PlayerControl.default voice="Library" />
-                    <div className="h-20" /> {/* Отступ для плеера */}
-                </>
-            );
-        };
-        return LibraryContent;
-    },
-    {
-        ssr: false, // <-- КЛЮЧ: Отключаем Server-Side Rendering для всей логики
-        loading: () => <div className="p-4 text-center text-txt-secondary">Загрузка контента библиотеки...</div>
-    }
-);
-// =========================================================================
+// ✅ 3. Динамический импорт PlayerControl (Из-за Audio Player Context)
+const PlayerControl = dynamic(() => import('../components/Player'), {
+    ssr: false, // Отключаем SSR
+    loading: () => null
+});
 
 
-// LibraryPage теперь просто загружает динамический Layout и ClientLibraryWrapper
 export default function LibraryPage() {
+    // usePlayer() здесь безопасен, если его Provider (PlayerProvider) также динамический.
     const router = useRouter();
+    const { setAudioUrl, setError } = usePlayer();
+    
+    // Функция для воспроизведения аудио из библиотеки
+    const handlePlayBook = useCallback((book) => {
+        try {
+            if (book.audioUrl) {
+                setAudioUrl(book.audioUrl);
+            } else {
+                setError("Аудиофайл не найден в записи.");
+            }
+        } catch (e) {
+            console.error("Failed to play book:", e);
+            setError("Не удалось начать воспроизведение.");
+        }
+    }, [setAudioUrl, setError]);
+    
     const tapEffect = { scale: 0.95 };
 
     return (
         <Layout>
-            {/* Кнопка "Назад" - не зависит от window, поэтому остается здесь */}
             <motion.button
                 onClick={() => router.push('/')}
                 whileTap={tapEffect}
@@ -85,8 +62,11 @@ export default function LibraryPage() {
                 &larr; На Главную
             </motion.button>
             
-            {/* Вся клиентская логика загружается здесь */}
-            <ClientLibraryWrapper />
+            {/* Рендер компонентов (Next.js автоматически берет .default) */}
+            <LibraryComponent onPlay={handlePlayBook} />
+            
+            <PlayerControl voice="Library" />
+            <div className="h-20" /> 
         </Layout>
     );
 }
