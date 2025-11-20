@@ -1,16 +1,15 @@
-// Файл: webapp/components/Generator.js
 import React, { useState, useCallback, useMemo } from 'react';
 import { usePlayer } from '@/context/PlayerContext'; 
-import { useAuth } from '@/context/AuthContext'; // ✅ ДОБАВЛЕНО: для доступа к userId, что потребуется в Приоритете 2
-import { Loader2 } from 'lucide-react'; 
+import { useAuth } from '@/context/AuthContext'; 
+import { Loader2, Save } from 'lucide-react'; 
+
+// Импорт Firebase Firestore и Storage
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // ✅ ДОБАВЛЕНО
+import { nanoid } from 'nanoid'; 
 
 // --- API Configuration ---
-// ✅ ИСПРАВЛЕНИЕ 1.2: Используем относительный путь для Vercel Route
 const API_URL = '/api/tts/generate'; 
-
-// --- Utility Functions for Audio Conversion ---
-// Удалены: base64ToArrayBuffer и pcmToWav, так как бэкенд возвращает готовый MP3.
-
 
 const Generator = () => {
     const { 
@@ -19,19 +18,71 @@ const Generator = () => {
         resetPlayer, 
         currentAudioUrl, 
         isPlaying,
+        duration, 
     } = usePlayer();
     
-    const { userId } = useAuth(); // Доступ к ID пользователя
-    const [textInput, setTextInput] = useState('');
-    const [isLoadingState, setIsLoadingState] = useState(false); // Локальный стейт для UI
-    const [error, setErrorState] = useState(null); // Локальный стейт для ошибок
+    // ✅ Получаем DB, Storage и UserID
+    const { db, storage, userId, isAuthReady } = useAuth(); 
     
-    // Мемоизированная проверка кнопки
-    const isGenerateDisabled = useMemo(() => {
-        return isLoadingState || textInput.trim().length === 0;
-    }, [isLoadingState, textInput]);
+    const [textInput, setTextInput] = useState('');
+    const [isLoadingState, setIsLoadingState] = useState(false); 
+    const [isSaving, setIsSaving] = useState(false); 
+    const [error, setErrorState] = useState(null); 
+    const [generatedBlob, setGeneratedBlob] = useState(null); 
+    
+    // ... (isGenerateDisabled)
 
-    // Обработчик генерации речи
+    // Проверка кнопки сохранения
+    const isSaveDisabled = useMemo(() => {
+        // Проверяем наличие Storage
+        return !generatedBlob || isLoadingState || isSaving || !db || !storage || !isAuthReady;
+    }, [generatedBlob, isLoadingState, isSaving, db, storage, isAuthReady]);
+
+    // ✅ ФУНКЦИЯ СОХРАНЕНИЯ В FIREBASE (Приоритет 2.1)
+    const saveAudioToFirebase = useCallback(async (blob, text, audioDuration) => {
+        if (!db || !storage || !userId || !blob) {
+            setErrorState("Система сохранения не инициализирована.");
+            return;
+        }
+
+        setIsSaving(true);
+        setErrorState(null);
+        // Используем nanoid для уникального ID, который будет общим для Firestore и Storage
+        const recordId = nanoid(); 
+
+        try {
+            // 1. Сохранение в Firebase Storage
+            const storagePath = `users/${userId}/tts/${recordId}.mp3`;
+            const storageRef = ref(storage, storagePath);
+            
+            // Загрузка Blob'а
+            const snapshot = await uploadBytes(storageRef, blob, { contentType: 'audio/mp3' });
+            // Получение публичного URL (доступ к файлу будет контролироваться правилами)
+            const audioUrl = await getDownloadURL(snapshot.ref);
+
+            // 2. Сохранение метаданных в Firestore
+            const libraryCollectionRef = collection(db, `users/${userId}/library`);
+            await addDoc(libraryCollectionRef, {
+                userId: userId,
+                text: text.substring(0, 5000), 
+                audioUrl: audioUrl,
+                duration: audioDuration, // ✅ Приоритет 2.2: Сохраняем длительность
+                createdAt: serverTimestamp(),
+            });
+
+            setErrorState("Аудио успешно сохранено в Библиотеке!");
+            setGeneratedBlob(null); 
+            
+        } catch (e) {
+            console.error('Save Error:', e);
+            setErrorState(`Ошибка сохранения: ${e.message}`);
+        } finally {
+            setIsSaving(false);
+        }
+    }, [db, storage, userId]);
+
+
+    // Обработчик генерации речи (без изменений, кроме вызова resetPlayer и сохранения Blob)
     const handleGenerateSpeech = useCallback(async () => {
         if (isGenerateDisabled) return;
 
@@ -39,18 +90,15 @@ const Generator = () => {
         setIsLoadingState(true);
         setErrorState(null);
         setError(null); 
+        setGeneratedBlob(null); 
+
+        let currentBlob = null;
 
         try {
-            // 1. Отправка запроса на FastAPI бэкенд
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ 
-                    text: textInput,
-                    voice: 'ru-RU', 
-                }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: textInput, voice: 'ru-RU' }),
             });
 
             if (!response.ok) {
@@ -58,16 +106,11 @@ const Generator = () => {
                 throw new Error(errorData.detail || `Ошибка HTTP: ${response.status}`);
             }
 
-            // 2. Получение данных как Blob (MP3 файл)
-            const audioBlob = await response.blob();
+            currentBlob = await response.blob();
+            setGeneratedBlob(currentBlob); 
             
-            // 3. Создание URL для воспроизведения
-            const audioUrl = URL.createObjectURL(audioBlob);
-
-            // 4. Передача URL в PlayerContext для воспроизведения
+            const audioUrl = URL.createObjectURL(currentBlob);
             setAudioUrl(audioUrl); 
-
-            // TODO Приоритет 2.1: Логика сохранения в Firebase Storage и Firestore.
 
         } catch (e) {
             console.error('Generation Error:', e.message);
@@ -78,13 +121,14 @@ const Generator = () => {
     }, [textInput, resetPlayer, setAudioUrl, setError, isGenerateDisabled]);
 
 
-    // Очистка ввода
-    const handleClear = useCallback(() => {
-        setTextInput('');
-        resetPlayer();
-    }, [resetPlayer]);
+    // ✅ ОБРАБОТЧИК СОХРАНЕНИЯ (Приоритет 2.3)
+    const handleSave = useCallback(() => {
+        if (isSaveDisabled) return;
+        saveAudioToFirebase(generatedBlob, textInput, duration);
+    }, [isSaveDisabled, generatedBlob, textInput, duration, saveAudioToFirebase]);
 
-    
+    // ... (handleClear и JSX остаются прежними)
+
     return (
         <div className="flex flex-col space-y-4">
             {/* Поле ввода текста */}
@@ -95,7 +139,7 @@ const Generator = () => {
                 rows={8}
                 maxLength={5000}
                 className="textarea-input"
-                disabled={isLoadingState}
+                disabled={isLoadingState || isSaving}
             />
 
             {/* Счетчик символов */}
@@ -103,27 +147,48 @@ const Generator = () => {
                 {textInput.length} / 5000
             </div>
 
-            {/* Кнопка генерации */}
-            <button
-                className={`btn-primary w-full flex items-center justify-center`}
-                onClick={handleGenerateSpeech}
-                disabled={isGenerateDisabled}
-            >
-                {isLoadingState ? (
-                    <div className="flex items-center space-x-2">
-                        <Loader2 className="animate-spin h-5 w-5 mr-2" /> 
-                        <span>Генерация аудио...</span>
-                    </div>
-                ) : (
-                    'Слушать Голосом'
-                )}
-            </button>
+            {/* Блок с кнопками Генерации и Сохранения */}
+            <div className='flex space-x-2'>
+                {/* Кнопка генерации */}
+                <button
+                    className={`btn-primary flex-1 flex items-center justify-center`}
+                    onClick={handleGenerateSpeech}
+                    disabled={isGenerateDisabled}
+                >
+                    {isLoadingState ? (
+                        <div className="flex items-center space-x-2">
+                            <Loader2 className="animate-spin h-5 w-5 mr-2" /> 
+                            <span>Генерация...</span>
+                        </div>
+                    ) : (
+                        'Слушать Голосом'
+                    )}
+                </button>
+
+                {/* ✅ Кнопка Сохранения (Приоритет 2.3) */}
+                <button
+                    className={`btn-primary w-16 flex-shrink-0 flex items-center justify-center transition-colors duration-200 ${
+                        isSaveDisabled 
+                            ? 'bg-txt-muted/30 cursor-not-allowed' 
+                            : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                    onClick={handleSave}
+                    disabled={isSaveDisabled}
+                    title="Сохранить в Библиотеку (Firebase Storage)"
+                >
+                    {isSaving ? (
+                        <Loader2 className="animate-spin h-5 w-5" />
+                    ) : (
+                        <Save className="h-5 w-5" />
+                    )}
+                </button>
+            </div>
             
             {/* Кнопка очистки */}
             <button
                 className="w-full text-center text-txt-secondary hover:text-red-400 py-1 transition-colors duration-200"
                 onClick={handleClear}
-                disabled={isLoadingState}
+                disabled={isLoadingState || isSaving}
             >
                 Очистить Ввод
             </button>
@@ -135,9 +200,9 @@ const Generator = () => {
                 </div>
             )}
             
-            {currentAudioUrl && !isPlaying && !isLoadingState && (
+            {generatedBlob && !isPlaying && !isLoadingState && !isSaving && (
                 <div className="p-3 bg-green-800/50 text-green-300 border border-green-500 rounded-lg">
-                    Аудио успешно сгенерировано. Нажмите Play для прослушивания.
+                    Аудио готово. Нажмите "Сохранить" или перейдите на другую вкладку.
                 </div>
             )}
         </div>
