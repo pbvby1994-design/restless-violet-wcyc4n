@@ -1,18 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import { Activity } from 'lucide-react'; 
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Activity, Mic, Volume2, Loader, X, Zap } from 'lucide-react'; 
 
 // ВАЖНО: apiKey ДОЛЖЕН быть пустой строкой, чтобы среда Canvas могла автоматически подставить ключ во время выполнения.
 const apiKey = ""; 
-const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
+const TTS_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
 
-// --- Вспомогательные функции для обработки аудио ---
-// Эти функции необходимы для преобразования сырых данных PCM в воспроизводимый браузером формат WAV.
+// --- Вспомогательные функции для аудио (TTS) ---
 
-/**
- * Преобразует строку base64 в ArrayBuffer.
- * @param {string} base64 - Строка base64.
- * @returns {ArrayBuffer}
- */
 const base64ToArrayBuffer = (base64) => {
     const binaryString = atob(base64);
     const len = binaryString.length;
@@ -23,13 +17,14 @@ const base64ToArrayBuffer = (base64) => {
     return bytes.buffer;
 };
 
-/**
- * Преобразует сырые 16-битные PCM-данные в WAV Blob.
- * @param {Int16Array} pcmData - Сырые 16-битные PCM-данные.
- * @param {number} sampleRate - Частота дискретизации аудио.
- * @returns {Blob}
- */
+const writeString = (view, offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+    }
+};
+
 const pcmToWav = (pcmData, sampleRate) => {
+    // [... (функции pcmToWav и writeString остались прежними)]
     const numChannels = 1;
     const bitsPerSample = 16;
     const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
@@ -38,12 +33,9 @@ const pcmToWav = (pcmData, sampleRate) => {
     const buffer = new ArrayBuffer(44 + pcmData.byteLength);
     const view = new DataView(buffer);
 
-    // Заголовок RIFF
     writeString(view, 0, 'RIFF');
     view.setUint32(4, 36 + pcmData.byteLength, true); 
     writeString(view, 8, 'WAVE');
-
-    // Заголовок FMT
     writeString(view, 12, 'fmt ');
     view.setUint32(16, 16, true); 
     view.setUint16(20, 1, true); 
@@ -52,12 +44,9 @@ const pcmToWav = (pcmData, sampleRate) => {
     view.setUint32(28, byteRate, true); 
     view.setUint16(32, blockAlign, true); 
     view.setUint16(34, bitsPerSample, true); 
-
-    // Заголовок DATA
     writeString(view, 36, 'data');
     view.setUint32(40, pcmData.byteLength, true); 
 
-    // Запись PCM-данных
     let offset = 44;
     for (let i = 0; i < pcmData.length; i++, offset += 2) {
         view.setInt16(offset, pcmData[i], true);
@@ -66,15 +55,7 @@ const pcmToWav = (pcmData, sampleRate) => {
     return new Blob([view], { type: 'audio/wav' });
 };
 
-/** Помощник для записи строки в DataView */
-const writeString = (view, offset, string) => {
-    for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-    }
-};
-
-
-// --- Логика TTS с экспоненциальной задержкой (для надежности API) ---
+// --- Логика API TTS с экспоненциальной задержкой ---
 
 const fetchWithBackoff = async (url, options, maxRetries = 3) => {
     for (let i = 0; i < maxRetries; i++) {
@@ -83,7 +64,6 @@ const fetchWithBackoff = async (url, options, maxRetries = 3) => {
             if (response.ok) {
                 return response;
             } else {
-                // Обработка ошибок сервера и других сбоев
                 throw new Error(`API вернул статус ${response.status}`);
             }
         } catch (error) {
@@ -110,7 +90,6 @@ const generateAudio = async (text, setAudioUrl, setIsLoading, setError) => {
         generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: {
-                // Голос Kore
                 voiceConfig: {
                     prebuiltVoiceConfig: { voiceName: "Kore" }
                 }
@@ -120,7 +99,7 @@ const generateAudio = async (text, setAudioUrl, setIsLoading, setError) => {
     };
 
     try {
-        const fullApiUrl = `${API_URL}?key=${apiKey}`;
+        const fullApiUrl = `${TTS_API_URL}?key=${apiKey}`;
 
         const response = await fetchWithBackoff(fullApiUrl, {
             method: 'POST',
@@ -151,95 +130,248 @@ const generateAudio = async (text, setAudioUrl, setIsLoading, setError) => {
 
     } catch (err) {
         if (err.message.includes('403')) {
-            setError("Доступ запрещен (403). Убедитесь, что ваш ключ API действителен и активирован для TTS.");
+            setError("Ошибка TTS: Доступ запрещен (403). Проверьте ключ API.");
         } else {
-            setError(`Ошибка генерации аудио: ${err.message}`);
+            setError(`Ошибка TTS: ${err.message}`);
         }
     } finally {
         setIsLoading(false);
     }
 };
 
+// --- Web Speech API для STT (Преобразование речи в текст) ---
 
-// --- React Компонент Страницы (замена App на TtsApp) ---
+// Получаем совместимый объект SpeechRecognition
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-const TtsApp = () => {
-    const [text, setText] = useState("Привет, это демонстрация сервиса преобразования текста в речь от Gemini API.");
+const SpeechUtilityApp = () => {
+    // Состояние для TTS (Text-to-Speech)
+    const [ttsText, setTtsText] = useState("Привет, это демонстрация сервиса преобразования текста в речь.");
     const [audioUrl, setAudioUrl] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [isTtsLoading, setIsTtsLoading] = useState(false);
+    const [ttsError, setTtsError] = useState(null);
 
-    const handleGenerate = useCallback(() => {
-        if (!text.trim()) {
-            // Используем пользовательский элемент UI вместо alert()
-            setError("Пожалуйста, введите текст для синтеза."); 
+    // Состояние для STT (Speech-to-Text)
+    const [sttText, setSttText] = useState("");
+    const [isListening, setIsListening] = useState(false);
+    const [sttError, setSttError] = useState(null);
+    const recognitionRef = useRef(null);
+
+    // Инициализация Web Speech API
+    useEffect(() => {
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false; // Останавливается после паузы
+            recognition.interimResults = true; // Отображение промежуточных результатов
+            recognition.lang = 'ru-RU'; // Указываем русский язык для лучшей пунктуации
+            
+            recognition.onresult = (event) => {
+                let finalTranscript = '';
+                let interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                // Используем finalTranscript в поле sttText
+                if (finalTranscript.trim()) {
+                    setSttText(prev => prev + finalTranscript);
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error("STT Error:", event.error);
+                setSttError(`Ошибка распознавания: ${event.error}. Убедитесь, что микрофон доступен.`);
+                setIsListening(false);
+            };
+
+            recognition.onend = () => {
+                setIsListening(false);
+            };
+
+            recognitionRef.current = recognition;
+        } else {
+            setSttError("Ваш браузер не поддерживает Web Speech API для STT.");
+        }
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, []);
+
+    const startListening = () => {
+        if (recognitionRef.current && !isListening) {
+            setSttError(null);
+            // Если предыдущий текст не был скопирован, добавляем разделитель
+            if (sttText.trim() && !sttText.endsWith('.') && !sttText.endsWith(' ') && !sttText.endsWith('!')) {
+                 setSttText(prev => prev + '. ');
+            }
+            setIsListening(true);
+            recognitionRef.current.start();
+        }
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current && isListening) {
+            recognitionRef.current.stop();
+            setIsListening(false);
+        }
+    };
+
+    const handleGenerateTts = useCallback(() => {
+        if (!ttsText.trim()) {
+            setTtsError("Пожалуйста, введите текст для синтеза.");
             return;
         }
-        generateAudio(text, setAudioUrl, setIsLoading, setError);
-    }, [text]);
+        generateAudio(ttsText, setAudioUrl, setIsTtsLoading, setTtsError);
+    }, [ttsText]);
 
-    // В Next.js корневой элемент <div /> будет обернут в _app.js и body. 
-    // Используем классы Tailwind из вашего `tailwind.config.js` и `globals.css`
+    const handleCopyText = () => {
+        navigator.clipboard.writeText(sttText)
+            .then(() => alert('Текст скопирован!')) // В идеале использовать кастомный UI
+            .catch(err => console.error('Ошибка копирования:', err));
+    };
+
+
     return (
         <div className="flex flex-col items-center p-4 sm:p-8 min-h-screen bg-bg-default text-txt-primary">
-            <h1 className="text-3xl font-bold mb-6 text-accent-neon">Демонстрация Gemini TTS</h1>
-            <div className="w-full max-w-lg card-glass p-6 space-y-4">
+            <h1 className="text-3xl font-bold mb-6 text-accent-neon flex items-center">
+                <Zap className="w-6 h-6 mr-3 text-accent-light" />
+                Speech Utility
+            </h1>
+
+            <div className="w-full max-w-lg space-y-8">
                 
-                {/* Поле ввода текста */}
-                <div className="relative">
+                {/* --- БЛОК 1: SPEECH-TO-TEXT (STT) --- */}
+                <div className="card-glass p-6 space-y-4">
+                    <h2 className="text-xl font-semibold text-txt-primary flex items-center">
+                        <Mic className="w-5 h-5 mr-2 text-txt-secondary" /> Речь в Текст (STT)
+                    </h2>
+                    
+                    {/* Вывод распознанного текста */}
                     <textarea
-                        className="textarea-input h-32"
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder="Введите текст для преобразования в речь..."
+                        className={`textarea-input h-32 ${isListening ? 'border-red-500' : ''}`}
+                        value={sttText}
+                        onChange={(e) => setSttText(e.target.value)}
+                        placeholder="Распознанный текст появится здесь..."
+                        // При записи пользователь не должен редактировать текст, чтобы не мешать onresult
+                        disabled={isListening} 
                     />
-                    <p className="text-right text-sm text-txt-secondary mt-1">
-                        {text.length} символов
-                    </p>
+                    
+                    {/* Кнопка записи */}
+                    <div className="flex space-x-3">
+                        <button
+                            onClick={isListening ? stopListening : startListening}
+                            disabled={!SpeechRecognition || isListening && !recognitionRef.current}
+                            className={`flex-1 flex justify-center items-center px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                                isListening 
+                                    ? 'bg-red-700 hover:bg-red-600 shadow-neon-red animate-pulse' 
+                                    : 'bg-accent-neon hover:bg-accent-light shadow-neon'
+                            }`}
+                        >
+                            {isListening ? (
+                                <div className="flex items-center space-x-2">
+                                    <Loader className="w-5 h-5 animate-spin" />
+                                    <span>Слушаю... Нажмите, чтобы остановить</span>
+                                </div>
+                            ) : (
+                                <div className="flex items-center space-x-2">
+                                    <Mic className="w-5 h-5" />
+                                    <span>Начать запись</span>
+                                </div>
+                            )}
+                        </button>
+
+                        <button
+                            onClick={() => setSttText('')}
+                            className="p-3 bg-bg-glass hover:bg-bg-card border border-txt-muted/50 rounded-xl transition-all duration-300"
+                            title="Очистить текст"
+                        >
+                            <X className="w-5 h-5 text-txt-secondary" />
+                        </button>
+                    </div>
+
+                    {sttError && (
+                        <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm">
+                            <p className="font-medium">Ошибка STT:</p>
+                            <p>{sttError}</p>
+                            <p className="mt-1 text-xs">
+                                Попробуйте использовать браузер Chrome или Edge.
+                            </p>
+                        </div>
+                    )}
                 </div>
 
-                {/* Кнопка генерации */}
-                <button
-                    onClick={handleGenerate}
-                    disabled={isLoading || !text.trim()}
-                    className="app-button"
-                >
-                    {isLoading ? (
-                        <div className="flex items-center space-x-2">
-                            <Activity className="h-5 w-5 animate-pulse" />
-                            <span>Генерация аудио...</span>
-                        </div>
-                    ) : (
-                        <span>Синтезировать речь</span>
-                    )}
-                </button>
 
-                {/* Отображение ошибки */}
-                {error && (
-                    <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg">
-                        <p className="font-medium">Ошибка:</p>
-                        <p className="text-sm">{error}</p>
-                    </div>
-                )}
+                {/* --- БЛОК 2: TEXT-TO-SPEECH (TTS) --- */}
+                <div className="card-glass p-6 space-y-4">
+                    <h2 className="text-xl font-semibold text-txt-primary flex items-center">
+                        <Volume2 className="w-5 h-5 mr-2 text-txt-secondary" /> Текст в Речь (TTS)
+                    </h2>
 
-                {/* Аудиоплеер */}
-                {audioUrl && (
-                    <div className="space-y-2 pt-4">
-                        <h2 className="text-lg font-semibold text-txt-secondary">Воспроизведение:</h2>
-                        <audio 
-                            controls 
-                            src={audioUrl} 
-                            className="w-full rounded-lg bg-bg-glass p-2 border border-accent-neon/50"
+                    {/* Поле ввода текста */}
+                    <div className="relative">
+                        <textarea
+                            className="textarea-input h-32"
+                            value={ttsText}
+                            onChange={(e) => setTtsText(e.target.value)}
+                            placeholder="Введите текст для преобразования в речь..."
+                            disabled={isTtsLoading}
                         />
+                        <p className="text-right text-sm text-txt-secondary mt-1">
+                            {ttsText.length} символов
+                        </p>
                     </div>
-                )}
+
+                    {/* Кнопка генерации */}
+                    <button
+                        onClick={handleGenerateTts}
+                        disabled={isTtsLoading || !ttsText.trim()}
+                        className="app-button"
+                    >
+                        {isTtsLoading ? (
+                            <div className="flex items-center space-x-2">
+                                <Activity className="h-5 w-5 animate-pulse" />
+                                <span>Генерация аудио...</span>
+                            </div>
+                        ) : (
+                            <span>Синтезировать речь</span>
+                        )}
+                    </button>
+
+                    {/* Отображение ошибки TTS */}
+                    {ttsError && (
+                        <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg text-sm">
+                            <p className="font-medium">Ошибка TTS:</p>
+                            <p>{ttsError}</p>
+                        </div>
+                    )}
+
+                    {/* Аудиоплеер */}
+                    {audioUrl && (
+                        <div className="space-y-2 pt-4">
+                            <h2 className="text-lg font-semibold text-txt-secondary">Воспроизведение:</h2>
+                            <audio 
+                                controls 
+                                src={audioUrl} 
+                                className="w-full rounded-lg bg-bg-glass p-2 border border-accent-neon/50"
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
             
             <footer className="mt-8 text-xs text-txt-muted text-center max-w-lg">
-                <p>Если вы видите ошибки, связанные с API, убедитесь, что в файле используется пустой ключ API (`const apiKey = "";`), чтобы разрешить системе Canvas автоматически подставить необходимый токен.</p>
+                <p>Функция "Речь в Текст" использует Web Speech API вашего браузера. Точность распознавания и пунктуация могут варьироваться.</p>
             </footer>
         </div>
     );
 };
 
-export default TtsApp;
+export default SpeechUtilityApp;
