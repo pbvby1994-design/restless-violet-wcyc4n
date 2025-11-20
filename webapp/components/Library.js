@@ -1,11 +1,16 @@
+// Файл: webapp/components/Library.js
 import React, { useState, useEffect, useCallback } from 'react';
-// Импортируем только необходимые функции Firestore и компоненты
-import { collection, query, onSnapshot, doc, deleteDoc, orderBy, limit } from 'firebase/firestore'; 
+// Импортируем только необходимые функции Firestore, но не его инициализацию
+import { collection, query, onSnapshot, doc, deleteDoc, orderBy, serverTimestamp } from 'firebase/firestore'; 
 import { Trash2, Loader2, Play, StopCircle } from 'lucide-react';
-import { usePlayer } from '@/context/PlayerContext';
+// ✅ Используем хук useAuth для получения инициализированных объектов из PlayerContext
+import { useAuth, usePlayer } from '@/context/PlayerContext'; 
 
-// Утилита для форматирования даты
+// --- Вспомогательные функции ---
+
+// Функция для форматирования даты
 const formatDate = (timestamp) => {
+    // Проверяем, что timestamp существует и имеет метод toDate() (для Firestore Timestamp)
     if (!timestamp || !timestamp.toDate) return 'Неизвестная дата';
     const date = timestamp.toDate();
     return date.toLocaleDateString('ru-RU', {
@@ -17,155 +22,185 @@ const formatDate = (timestamp) => {
     });
 };
 
+// Функция для форматирования времени (из FullPlayer.js, чтобы избежать ошибок)
+const formatDuration = (seconds) => {
+    if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+};
+
+
+// --- Основной компонент Библиотека ---
 const Library = () => {
-    // 🛑 ИСПРАВЛЕНО: Получаем db, userId, isAuthReady из контекста
+    // ✅ Получаем состояние плеера для управления воспроизведением
     const { 
-        currentUrl, 
+        currentUrl: currentAudioUrl, // Переименуем для ясности
         isPlaying, 
         playSpeech, 
-        stopSpeech, 
-        db, 
-        userId, 
-        isAuthReady,
-        // Добавьте сюда функции плеера, если они используются, например:
-        // setAudioUrl 
+        stopSpeech,
+        setError 
     } = usePlayer(); 
     
-    // Состояния компонента
+    // ✅ Получаем инициализированные объекты из контекста
+    const { db, auth, userId, isAuthReady } = useAuth(); 
+
     const [records, setRecords] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setLocalError] = useState(null);
 
-    /**
-     * Функция загрузки данных из Firestore.
-     */
-    const fetchData = useCallback(() => {
-        if (!db || !isAuthReady) {
-            // Если DB или Auth не готовы, пропускаем загрузку
-            if (!isAuthReady) setIsLoading(false);
+    // 1. Загрузка записей из Firestore
+    useEffect(() => {
+        // Загрузка возможна только, если Auth готов И у нас есть ID пользователя И объект DB
+        if (!isAuthReady || !userId || !db) {
+            if (isAuthReady) {
+                // Если Auth готов, но нет userId (что странно), или нет db (что означает сбой инициализации)
+                setLocalError("База данных или пользователь не инициализированы.");
+            }
+            // Выходим до тех пор, пока не получим все данные
             return;
         }
 
-        setIsLoading(true);
-        setError(null);
-
-        // Путь к коллекции: все записи (для демонстрации)
-        // В реальном приложении: `collection(db, 'users', userId, 'records')`
-        const recordsCollectionRef = collection(db, 'records');
+        const recordsCollectionRef = collection(db, 'user_records');
         
-        // Создаем запрос: сортировка по дате, лимит 20 последних
-        const q = query(recordsCollectionRef, orderBy('createdAt', 'desc'), limit(20));
-
-        // Подписываемся на изменения в реальном времени
+        // Создаем запрос: только записи пользователя, отсортированные по дате создания
+        // ✅ ВАЖНО: Мы запрашиваем ВСЕ записи, и только правила Firestore ограничат доступ
+        const q = query(
+            recordsCollectionRef,
+            // orderBy('createdAt', 'desc') // Добавьте это, если хотите сортировать
+        );
+        
+        // Подписка на изменения в коллекции (onSnapshot)
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedRecords = snapshot.docs.map(document => ({
-                id: document.id,
-                ...document.data()
-            }));
-            setRecords(fetchedRecords);
+            const fetchedRecords = [];
+            snapshot.forEach((doc) => {
+                // Добавляем ID документа к данным
+                fetchedRecords.push({ id: doc.id, ...doc.data() });
+            });
+            
+            // Фильтруем на клиенте только те записи, где userId совпадает
+            // Это ДОПОЛНИТЕЛЬНАЯ мера, основное ограничение - в Правилах Firestore.
+            const userRecords = fetchedRecords.filter(record => record.userId === userId);
+
+            setRecords(userRecords);
             setIsLoading(false);
+            setLocalError(null);
         }, (err) => {
             console.error("Failed to fetch records:", err);
-            setError("Не удалось загрузить библиотеку. Проверьте правила Firestore.");
+            setLocalError("Ошибка загрузки записей: " + err.message);
             setIsLoading(false);
         });
 
         // Функция очистки (отписка)
         return () => unsubscribe();
-    }, [db, isAuthReady]); // Зависит от готовности DB и Auth
+    }, [isAuthReady, userId, db]);
 
-    useEffect(() => {
-        // Запускаем загрузку данных при готовности DB и Auth
-        return fetchData();
-    }, [fetchData]);
 
-    /**
-     * Удаление записи
-     */
-    const handleDelete = useCallback(async (id, recordUserId) => {
-        if (!db || recordUserId !== userId) {
-            alert("Вы не можете удалить чужую запись.");
+    // 2. Функция удаления записи
+    const handleDelete = useCallback(async (recordId) => {
+        if (!db || !userId) {
+            setLocalError("Ошибка: Невозможно удалить. Пользователь или DB не инициализированы.");
             return;
         }
 
-        if (window.confirm("Вы уверены, что хотите удалить эту запись?")) {
-            try {
-                // Путь к документу: records/{id}
-                const docRef = doc(db, 'records', id);
-                await deleteDoc(docRef);
-                // Snapshot listener сам обновит состояние `records`
-            } catch (e) {
-                console.error("Error deleting document: ", e);
-                setError("Ошибка при удалении записи.");
-            }
+        try {
+            await deleteDoc(doc(db, 'user_records', recordId));
+            // Ошибка Missing or insufficient permissions. будет возникать здесь,
+            // если правила Firestore настроены неправильно.
+        } catch (e) {
+            console.error("Error removing document: ", e);
+            setLocalError("Недостаточно прав для удаления записи. Проверьте правила Firestore.");
         }
     }, [db, userId]);
 
 
-    const isLibraryVisible = records.length > 0 || !isLoading;
+    // 3. Функция воспроизведения записи (передаем в BookCard)
+    const handlePlayRecord = useCallback((record) => {
+        // Устанавливаем текущий URL и текст для плеера
+        playSpeech(record.audioUrl, record.text); 
+    }, [playSpeech]);
+
+
+    // --- Рендеринг ---
+    if (!isAuthReady) {
+        return (
+            <div className="text-center p-8 text-txt-secondary">
+                <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-accent-neon" />
+                <p>Инициализация пользователя...</p>
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-4">
-            <h2 className="text-xl font-bold text-txt-primary">Моя Библиотека</h2>
-            
-            {/* Сообщения о состоянии */}
-            {isLoading && (
-                <div className="flex items-center justify-center p-6 text-txt-secondary">
-                    <Loader2 className="animate-spin h-6 w-6 mr-3" />
-                    Загрузка записей...
-                </div>
-            )}
+        <div className="p-4 max-w-lg mx-auto min-h-[300px]">
+            <h2 className="text-2xl font-bold mb-4 text-txt-primary">Моя Библиотека</h2>
             
             {error && (
-                <div className="p-3 bg-red-800/50 text-red-300 border border-red-500 rounded-lg">
+                <div className="p-3 bg-red-800/50 text-red-300 border border-red-500 rounded-lg mb-4">
                     {error}
                 </div>
             )}
+            
+            {isLoading && !error && (
+                <div className="text-center p-8 text-txt-secondary">
+                    <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-accent-neon" />
+                    <p>Загрузка записей...</p>
+                </div>
+            )}
+            
+            {!isLoading && records.length === 0 && (
+                <div className="text-center p-8 text-txt-secondary border border-dashed border-txt-muted/30 rounded-lg">
+                    <p className="text-lg mb-2">Библиотека пуста</p>
+                    <p className="text-sm">Сгенерируйте и сохраните аудио на вкладке "Генератор речи".</p>
+                </div>
+            )}
 
-            {/* Список записей */}
-            {isLibraryVisible && (
-                <div className="space-y-3">
-                    {records.length === 0 && !isLoading ? (
-                        <div className="p-4 text-center text-txt-muted bg-bg-glass rounded-lg">
-                            Ваша библиотека пуста. Сгенерируйте свою первую речь!
-                        </div>
-                    ) : records.map((record) => {
-                        const isCurrent = currentUrl === record.audioUrl;
-                        const isOwner = record.userId === userId;
+            {!isLoading && records.length > 0 && (
+                <div className="space-y-4">
+                    {records.map((record) => {
+                        const isCurrent = record.audioUrl === currentAudioUrl;
+                        const isOwner = record.userId === userId; // Всегда true, но для безопасности
 
                         return (
+                            // Используем div вместо BookCard для упрощения
                             <div 
-                                key={record.id} 
-                                className={`flex items-center justify-between p-3 rounded-xl border transition-all duration-300 ${isCurrent ? 'border-accent-neon bg-accent-neon/10 shadow-neon-light' : 'border-white/10 bg-bg-card'}`}
+                                key={record.id}
+                                className={`
+                                    flex items-center justify-between p-3 rounded-xl border transition-all duration-300
+                                    ${isCurrent 
+                                        ? 'border-accent-neon bg-accent-neon/10 shadow-neon-sm' 
+                                        : 'border-white/10 bg-bg-card hover:bg-white/5'
+                                    }
+                                `}
                             >
-                                {/* Информация о записи */}
-                                <div className="flex-1 min-w-0 pr-3">
-                                    <p className={`text-sm font-semibold truncate ${isCurrent ? 'text-white' : 'text-txt-primary'}`}>
-                                        {record.title || 'Безымянная запись'}
-                                    </p>
+                                {/* Левая часть: Информация */}
+                                <div className="min-w-0 flex-1 pr-4">
+                                    <h3 className="font-semibold text-txt-primary truncate">
+                                        {/* Используем первые 50 символов как заголовок */}
+                                        {record.text.length > 50 
+                                            ? record.text.substring(0, 50) + '...' 
+                                            : record.text
+                                        }
+                                    </h3>
                                     <p className="text-xs text-txt-muted mt-0.5">
-                                        Создано: {formatDate(record.createdAt)} 
-                                        {isOwner ? ' (Вы)' : ''}
+                                        {formatDate(record.createdAt)} • {formatDuration(record.duration || 0)}
                                     </p>
                                 </div>
 
-                                {/* Кнопки управления */}
-                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                {/* Правая часть: Кнопки управления */}
+                                <div className="flex space-x-2 flex-shrink-0">
                                     {/* Кнопка Play/Stop */}
                                     <button 
-                                        className={`p-2 rounded-full transition-colors duration-200 ${isCurrent && isPlaying 
-                                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/40' 
-                                            : 'bg-accent-neon/20 text-accent-neon hover:bg-accent-neon/30'
+                                        className={`p-2 rounded-full transition-colors duration-200 ${
+                                            isCurrent && isPlaying 
+                                                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/40'
+                                                : 'bg-accent-neon/20 text-accent-neon hover:bg-accent-neon/40'
                                         }`}
                                         onClick={() => {
                                             if (isCurrent && isPlaying) {
                                                 stopSpeech();
                                             } else {
-                                                // 🛑 Важное замечание: Здесь должна быть логика playSpeech, 
-                                                // которая загружает и воспроизводит URL:
-                                                // playSpeech(record.audioUrl, record.text, record.title);
-                                                // В вашем текущем коде playSpeech ожидает только URL
-                                                playSpeech(record.audioUrl); 
+                                                handlePlayRecord(record);
                                             }
                                         }}
                                         title={isCurrent && isPlaying ? "Остановить" : "Воспроизвести"}
@@ -181,7 +216,7 @@ const Library = () => {
                                     {isOwner && (
                                         <button 
                                             className="p-2 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors duration-200"
-                                            onClick={() => handleDelete(record.id, record.userId)}
+                                            onClick={() => handleDelete(record.id)}
                                             title="Удалить мою запись"
                                         >
                                             <Trash2 className="h-5 w-5" />
