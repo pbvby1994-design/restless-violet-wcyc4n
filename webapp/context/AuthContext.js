@@ -1,10 +1,10 @@
-// Файл: webapp/context/AuthContext.js (TWA SDK, Firebase, Auth)
+// Файл: webapp/context/AuthContext.js (TWA SDK, Firebase, Auth, DB, Storage)
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-// Импортируем WebApp динамически или обрабатываем его использование
 import WebApp from '@twa-dev/sdk'; 
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage'; // ✅ ДОБАВЛЕНО: Импорт Firebase Storage
 
 // --- Глобальные переменные из среды Canvas (для Vercel/TMA) ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
@@ -16,20 +16,20 @@ const initialAuthToken = typeof __initial_auth_token !== 'undefined'
     : null;
 // ---------------------------------------------
 
-let app, db, auth;
+let app, db, auth, storage; // ✅ ДОБАВЛЕНО: storage
 if (Object.keys(firebaseConfig).length > 0 && typeof window !== 'undefined') {
-  // Инициализация Firebase ТОЛЬКО на клиенте, чтобы избежать ошибок
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     auth = getAuth(app);
+    storage = getStorage(app); // ✅ ИНИЦИАЛИЗАЦИЯ: Firebase Storage
     console.log("Firebase initialized successfully on client.");
   } catch (error) {
     console.error("Firebase initialization failed:", error);
   }
 }
 
-// Создание контекста
+// Создание контекста (добавление storage)
 const AuthContext = createContext({
   textToSpeak: '',
   updateTextToSpeak: () => {},
@@ -37,6 +37,7 @@ const AuthContext = createContext({
   isWebAppReady: false,
   db: null,
   auth: null,
+  storage: null, // ✅ ЭКСПОРТ: storage в контекст
   userId: null,
   isAuthReady: false,
   appId: 'default-app-id',
@@ -53,7 +54,7 @@ export const AuthProvider = ({ children }) => {
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // 1. Инициализация TWA SDK (ТОЛЬКО на клиенте)
+  // 1. Инициализация TWA SDK (без изменений)
   useEffect(() => {
     if (typeof window !== 'undefined' && WebApp.isReady) {
       setIsWebAppReady(true);
@@ -64,11 +65,11 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // 2. Инициализация Firebase Auth (ТОЛЬКО на клиенте)
+  // 2. Инициализация Firebase Auth (без изменений)
   useEffect(() => {
     if (typeof window === 'undefined' || !auth) {
       if (!auth) console.warn("Firebase Auth not initialized on client.");
-      setIsAuthReady(true);
+      setIsAuthReady(true); 
       return;
     }
 
@@ -109,25 +110,13 @@ export const AuthProvider = ({ children }) => {
     isWebAppReady,
     db: db, 
     auth: auth, 
+    storage: storage, // ✅ ЭКСПОРТ: storage
     userId, 
     isAuthReady,
     appId,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useTwaData = () => {
-  console.error("useTwaData must be used within an AuthProvider.");
-  return {
-    themeParams: {},
-    isWebAppReady: false,
-    db: null,
-    auth: null,
-    userId: null,
-    isAuthReady: false,
-    appId: 'default-app-id',
-  };
 };
 
 export default AuthProvider;
