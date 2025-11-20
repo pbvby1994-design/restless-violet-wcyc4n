@@ -4,16 +4,16 @@ import React, { useEffect } from 'react';
 import WebApp from '@twa-dev/sdk';
 import Header from './Header';
 import Footer from './Footer';
-// ✅ ИСПРАВЛЕНИЕ 1.1: Импортируем useAuth для данных TWA/Auth
-import { usePlayer } from '@/context/PlayerContext';;
+// ✅ ИСПРАВЛЕНИЕ: Импортируем usePlayer из нового файла контекста
+import { usePlayer } from '@/context/PlayerContext'; 
 
 /**
  * Компонент макета, который оборачивает все приложение,
  * применяет стили темы Telegram и центрирует контент.
  */
 const Layout = ({ children }) => {
-  // ✅ ИСПРАВЛЕНИЕ 1.1: Получаем themeParams и isWebAppReady из нового AuthContext
-  const { themeParams, isWebAppReady } = useAuth();
+  // Получаем themeParams и isWebAppReady из контекста
+  const { themeParams, isWebAppReady } = usePlayer();
   
   // Используем надежные заглушки для SSR
   const bgColor = themeParams?.bg_color || '#0B0F15';
@@ -36,23 +36,20 @@ const Layout = ({ children }) => {
   return (
     // Внешняя обертка: занимает весь экран и центрирует внутренний контейнер
     <div 
-      className="min-h-screen flex items-center justify-center p-4 transition-colors duration-300"
-      style={{ backgroundColor: bgColor, color: textColor }}
+      className="min-h-screen flex flex-col items-center justify-start p-0 transition-colors duration-300"
+      // Используем цвета из TWA или заглушки
+      style={{ backgroundColor: bgColor, color: textColor }} 
     >
-      {/* Внутренний контейнер-карточка */}
-      <div 
-        className="w-full max-w-md card-glass backdrop-blur-lg"
-        style={{ backgroundColor: headerBgColor }}
-      >
         <Header />
-        <main className="p-4 flex-grow w-full">
-          {children}
+        
+        {/* Центральный контейнер контента */}
+        <main className="flex-1 w-full max-w-lg mx-auto p-4 pt-6 pb-20">
+            {children}
         </main>
+        
         <Footer />
-      </div>
     </div>
   );
 };
 
 export default Layout;
-
