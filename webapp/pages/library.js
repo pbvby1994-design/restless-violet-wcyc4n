@@ -1,9 +1,9 @@
-// Файл: webapp/pages/library.js (Чистая и правильная версия)
+// Файл: webapp/pages/library.js (Окончательная версия)
 
 import { useCallback } from 'react';
-import dynamic from 'next/dynamic'; // ✅ Ключевой импорт
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
-// ✅ Статический импорт usePlayer в порядке, т.к. Layout (родитель) сделан dynamic
+// Хук usePlayer теперь может быть статическим, так как его Provider динамический в _app.js.
 import { usePlayer } from '../context/PlayerContext'; 
 import { motion } from "framer-motion";
 
@@ -18,23 +18,23 @@ const Layout = dynamic(() => import('../components/Layout'), {
   )
 });
 
-// ✅ 2. Динамический импорт LibraryComponent (Из-за Firebase)
+// ✅ 2. Динамический импорт LibraryComponent (Из-за Firebase Firestore/Auth)
 const LibraryComponent = dynamic(() => import('../components/Library'), {
-    ssr: false, // Отключаем SSR
+    ssr: false, // Ключ: предотвращаем выполнение кода Firebase на сервере
     loading: () => <div className="p-4 text-center text-txt-secondary">Загрузка библиотеки...</div>
 });
 
-// ✅ 3. Динамический импорт PlayerControl (Из-за Audio Player Context)
+// ✅ 3. Динамический импорт PlayerControl (Из-за Audio Player UI)
 const PlayerControl = dynamic(() => import('../components/Player'), {
-    ssr: false, // Отключаем SSR
+    ssr: false, // Ключ: предотвращаем выполнение кода, связанного с Audio API
     loading: () => null
 });
 
 
 export default function LibraryPage() {
-    // usePlayer() здесь безопасен, если его Provider (PlayerProvider) также динамический.
     const router = useRouter();
-    const { setAudioUrl, setError } = usePlayer();
+    // Хук usePlayer() потребляет контекст, который защищен в _app.js
+    const { setAudioUrl, setError } = usePlayer(); 
     
     // Функция для воспроизведения аудио из библиотеки
     const handlePlayBook = useCallback((book) => {
@@ -53,7 +53,9 @@ export default function LibraryPage() {
     const tapEffect = { scale: 0.95 };
 
     return (
-        <Layout>
+        // Layout уже динамически защищен
+        <Layout> 
+            {/* Кнопка "Назад" - не требует клиентских API, остается статичной */}
             <motion.button
                 onClick={() => router.push('/')}
                 whileTap={tapEffect}
@@ -62,11 +64,11 @@ export default function LibraryPage() {
                 &larr; На Главную
             </motion.button>
             
-            {/* Рендер компонентов (Next.js автоматически берет .default) */}
+            {/* Динамически загруженные компоненты */}
             <LibraryComponent onPlay={handlePlayBook} />
             
             <PlayerControl voice="Library" />
-            <div className="h-20" /> 
+            <div className="h-20" /> {/* Отступ для плеера */}
         </Layout>
     );
 }
