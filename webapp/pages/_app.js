@@ -1,8 +1,10 @@
 // Файл: webapp/pages/_app.js
 // Основной файл приложения Next.js, который оборачивает все страницы.
 
+// ИСПРАВЛЕНИЕ: Используем относительный путь для globals.css
+import '../styles/globals.css'; 
+
 // Импорты:
-import '@/styles/globals.css'; // Общие стили и Tailwind
 import { PlayerProvider } from '@/context/PlayerContext'; // Контекст состояния приложения и Telegram/Firebase
 import Layout from '@/components/Layout'; // Основной макет приложения (центрирование, карточка)
 import Head from 'next/head'; // Для управления заголовком и метаданными
