@@ -2,11 +2,15 @@
 import { useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
-// ✅ ИСПРАВЛЕНИЕ: Используем PlayerContext
-import { usePlayer } from '../context/PlayerContext'; 
+import { usePlayer } from '../context/PlayerContext';
 import { motion } from "framer-motion";
 
-// Динамический импорт Layout для избежания SSR ошибок с Telegram SDK
+// 🛑 УДАЛЯЕМ СТАТИЧЕСКИЕ ИМПОРТЫ
+// import LibraryComponent from '../components/Library'; 
+// import PlayerControl from '../components/Player';
+
+
+// 1. Динамический импорт Layout (из-за TWA SDK)
 const Layout = dynamic(() => import('../components/Layout'), { 
   ssr: false, 
   loading: () => (
@@ -16,22 +20,29 @@ const Layout = dynamic(() => import('../components/Layout'), {
   )
 });
 
-// Импортируем компонент библиотеки
-import LibraryComponent from '../components/Library'; 
-import PlayerControl from '../components/Player';
+// ✅ 2. Динамический импорт LibraryComponent (из-за Firebase)
+const LibraryComponent = dynamic(() => import('../components/Library'), {
+    ssr: false,
+    loading: () => <div className="p-4 text-center text-txt-secondary">Загрузка библиотеки...</div>
+});
+
+// ✅ 3. Динамический импорт PlayerControl (из-за Audio Player)
+const PlayerControl = dynamic(() => import('../components/Player'), {
+    ssr: false,
+    loading: () => null
+});
+
 
 export default function LibraryPage() {
     const router = useRouter();
-    // Получаем playSpeech, который теперь управляет воспроизведением из контекста
-    const { playSpeech, setError } = usePlayer(); 
+    const { setAudioUrl, setError } = usePlayer();
     
     // Функция для воспроизведения аудио из библиотеки
     const handlePlayBook = useCallback((book) => {
         try {
             // Аудиофайлы в библиотеке должны хранить URL
             if (book.audioUrl) {
-                // Вызываем playSpeech, передавая URL и заголовок (для отображения в плеере)
-                playSpeech(book.audioUrl, book.title || 'Библиотечная запись');
+                setAudioUrl(book.audioUrl);
             } else {
                 setError("Аудиофайл не найден в записи.");
             }
@@ -39,7 +50,7 @@ export default function LibraryPage() {
             console.error("Failed to play book:", e);
             setError("Не удалось начать воспроизведение.");
         }
-    }, [playSpeech, setError]);
+    }, [setAudioUrl, setError]);
     
     // Эффект нажатия
     const tapEffect = { scale: 0.95 };
@@ -55,6 +66,7 @@ export default function LibraryPage() {
                 &larr; На Главную
             </motion.button>
             
+            {/* Теперь этот компонент загружается только на клиенте */}
             <LibraryComponent onPlay={handlePlayBook} />
             
             {/* Плеер всегда отображается внизу */}
@@ -63,3 +75,6 @@ export default function LibraryPage() {
         </Layout>
     );
 }
+
+// ПРИМЕЧАНИЕ: Поскольку эта страница не является главной, она не использует MiniPlayer,
+// а вместо него использует FullPlayer (PlayerControl). Оба требуют ssr: false.
