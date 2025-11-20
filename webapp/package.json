@@ -14,6 +14,7 @@
     "@vercel/analytics": "^1.2.2",
     "firebase": "^10.11.1",
     "framer-motion": "^11.1.7",
+    "lucide-react": "^0.378.0",  <-- ДОБАВИТЬ ЭТУ СТРОКУ
     "next": "14.2.3",
     "react": "18.3.1",
     "react-dom": "18.3.1"
