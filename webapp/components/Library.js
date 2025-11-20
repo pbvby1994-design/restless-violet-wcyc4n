@@ -4,11 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore'; 
 import { Trash2, Loader2, Play, StopCircle } from 'lucide-react';
 
-// ✅ ИСПРАВЛЕНИЕ: Импортируем usePlayer и useAuth из PlayerContext
-import { usePlayer, useAuth } from '@/context/PlayerContext'; 
+// ✅ ИСПРАВЛЕНИЕ: Используем ТОЛЬКО usePlayer, который экспортирует все нужные данные
+import { usePlayer } from '@/context/PlayerContext'; 
 
-// --- УДАЛЕНО: Вся локальная конфигурация и импорт Firebase Auth/App ---
-// УДАЛЕНО: const appId, const firebaseConfig, const initialAuthToken, initializeApp, getAuth и т.д.
+// --- УДАЛЕНЫ НЕИСПОЛЬЗУЕМЫЕ ИМПОРТЫ FIREBASE AUTH/APP ---
 
 // Функция для форматирования даты (оставляем)
 const formatDate = (timestamp) => {
@@ -25,31 +24,34 @@ const formatDate = (timestamp) => {
 
 // Компонент теперь принимает onPlay из pages/library.js
 const Library = ({ onPlay }) => {
-    // 1. ✅ ИСПОЛЬЗУЕМ: Состояние плеера
-    const { currentUrl, isPlaying, stopSpeech } = usePlayer();
+    // ✅ ИСПРАВЛЕНИЕ: Получаем все необходимые данные из usePlayer
+    const { 
+        currentUrl, 
+        isPlaying, 
+        stopSpeech, 
+        // Auth/DB данные:
+        db, 
+        userId, 
+        isAuthReady, 
+        setError 
+    } = usePlayer(); 
     
-    // 2. ✅ ИСПОЛЬЗУЕМ: Auth и DB из нового useAuth хука
-    const { db, userId, isAuthReady } = useAuth(); // Больше не нужно локально инициализировать!
-    
-    // Остальные состояния
     const [records, setRecords] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+    // error теперь берется из контекста для плеера, но локальный error нужен для FireStore
+    const [localError, setLocalError] = useState(null); 
     
-    // --- УДАЛЕНО: Локальные состояния DB/Auth и useEffect для их инициализации ---
-
     // 3. Эффект для подписки на изменения в Firestore
     useEffect(() => {
-        // Запускаем подписку только после того, как аутентификация готова
-        if (!isAuthReady || !db) {
-            // Если не готово, можем просто выйти или показать индикатор загрузки
+        // Запускаем подписку только после того, как аутентификация готова И DB инициализирована
+        if (!isAuthReady || !db || !userId) {
             if (!isAuthReady) setIsLoading(true); 
             return;
         }
 
         try {
             setIsLoading(true);
-            setError(null);
+            setLocalError(null);
 
             // Создаем путь к коллекции: /users/{userId}/records
             const recordsCollectionRef = collection(db, 'users', userId, 'records');
@@ -62,12 +64,17 @@ const Library = ({ onPlay }) => {
                     ...d.data()
                 }));
                 // Сортировка по дате создания
-                fetchedRecords.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate()); 
+                fetchedRecords.sort((a, b) => {
+                    const dateA = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate() : 0;
+                    const dateB = b.createdAt && b.createdAt.toDate ? b.createdAt.toDate() : 0;
+                    return dateB - dateA;
+                });
                 setRecords(fetchedRecords);
                 setIsLoading(false);
             }, (err) => {
+                // ЭТА ФУНКЦИЯ ВЫЗЫВАЕТСЯ ПРИ ОШИБКЕ ПРАВ ДОСТУПА
                 console.error("Firestore subscription error:", err);
-                setError("Ошибка загрузки библиотеки. Проверьте соединение.");
+                setLocalError("Ошибка загрузки библиотеки. Проверьте права доступа в Firebase.");
                 setIsLoading(false);
             });
 
@@ -75,7 +82,7 @@ const Library = ({ onPlay }) => {
             return () => unsubscribe();
         } catch (e) {
             console.error("Setup Firestore error:", e);
-            setError("Ошибка инициализации базы данных.");
+            setLocalError("Ошибка инициализации базы данных.");
             setIsLoading(false);
             return () => {};
         }
@@ -97,7 +104,7 @@ const Library = ({ onPlay }) => {
                 setError("Не удалось удалить запись.");
             }
         }
-    }, [db, userId]);
+    }, [db, userId, setError]);
 
 
     // 5. Визуализация
@@ -110,10 +117,10 @@ const Library = ({ onPlay }) => {
         );
     }
     
-    if (error) {
+    if (localError) {
         return (
             <div className="text-center p-8 bg-red-800/50 text-red-300 border border-red-500 rounded-xl">
-                {error}
+                {localError}
             </div>
         );
     }
@@ -128,6 +135,7 @@ const Library = ({ onPlay }) => {
         );
     }
 
+    // ... (Остальной код рендеринга без изменений) ...
     return (
         <div className="space-y-4">
             <h2 className="text-2xl font-bold text-txt-primary">Моя Библиотека ({records.length})</h2>
