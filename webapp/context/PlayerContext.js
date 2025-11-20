@@ -1,110 +1,149 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
-// Важно: Мы импортируем WebApp, но не используем его до тех пор, пока не убедимся, что находимся в браузере.
-// TWA-SDK сам по себе безопасен для импорта, но его методы (WebApp.themeParams, WebApp.ready) должны вызываться осторожно.
+// Файл: webapp/context/PlayerContext.js
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import WebApp from '@twa-dev/sdk';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 
-// 1. Создание контекста
-const PlayerContext = createContext();
+// --- Глобальные переменные из среды Canvas (обязательно для использования) ---
+// Инициализация Firebase Config и App ID
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+    ? JSON.parse(__firebase_config) 
+    : {};
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' 
+    ? __initial_auth_token 
+    : null;
+// --------------------------------------------------------------------------
 
-// 2. Определение полностью безопасного начального состояния (без WebApp)
-// Используем безопасные заглушки для цветов, которые будут перезаписаны в useEffect.
-const SAFE_DEFAULT_THEME = {
-  bg_color: '#0B0F15',
-  header_bg_color: '#1A1E24',
-  text_color: '#FFFFFF',
-};
 
-const initialPlayerState = {
-  // Инициализация themeParams безопасным объектом, чтобы избежать ошибки undefined.
-  themeParams: SAFE_DEFAULT_THEME,
+// Инициализация Firebase, если конфигурация доступна
+let app, db, auth;
+if (Object.keys(firebaseConfig).length > 0) {
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    console.log("Firebase initialized successfully.");
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+  }
+}
+
+// Создание контекста с заглушками (заглушка предотвращает ошибки при использовании до инициализации)
+const PlayerContext = createContext({
   textToSpeak: '',
-  isReady: false, // Флаг для отслеживания готовности контекста
-};
+  updateTextToSpeak: () => {},
+  themeParams: {},
+  isWebAppReady: false,
+  // Firestore / Auth
+  db: db || null,
+  auth: auth || null,
+  userId: null,
+  isAuthReady: false,
+  appId: appId,
+});
 
-/**
- * Провайдер контекста для управления глобальным состоянием, включая
- * параметры темы Telegram WebApp и данные, связанные с TTS.
- */
 export const PlayerProvider = ({ children }) => {
-  const [state, setState] = useState(initialPlayerState);
+  const [textToSpeak, setTextToSpeak] = useState('');
+  const [themeParams, setThemeParams] = useState(WebApp.themeParams || {});
+  const [isWebAppReady, setIsWebAppReady] = useState(WebApp.ready);
+  
+  // Auth & Firestore State
+  const [userId, setUserId] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // Инициализация WebApp SDK и прослушивание изменений темы.
-  // Этот хук гарантированно запускается только на клиенте (в браузере),
-  // что делает вызовы WebApp безопасными.
+
+  // 1. Инициализация WebApp SDK
   useEffect(() => {
-    // Проверка, что мы в браузере и TWA SDK загрузился
-    if (typeof window !== 'undefined' && WebApp.initDataUnsafe) {
-      
-      // Инициализируем themeParams из SDK
-      const currentTheme = WebApp.themeParams || SAFE_DEFAULT_THEME;
-      
-      setState(prev => ({
-        ...prev,
-        themeParams: currentTheme,
-        isReady: true,
-      }));
-      
-      // Добавляем прослушиватель для отслеживания изменений темы
-      const handleThemeChange = () => {
-        setState(prev => ({
-          ...prev,
-          themeParams: WebApp.themeParams || SAFE_DEFAULT_THEME,
-        }));
-      };
-      WebApp.onEvent('themeChanged', handleThemeChange);
+    if (WebApp.initDataUnsafe) {
+      WebApp.ready();
+      WebApp.expand();
+      setIsWebAppReady(true);
+      setThemeParams(WebApp.themeParams);
 
+      // Listener для смены темы
+      WebApp.onEvent('themeChanged', (newThemeParams) => {
+        setThemeParams(newThemeParams);
+      });
+
+      // Очистка при размонтировании
       return () => {
-        WebApp.offEvent('themeChanged', handleThemeChange);
+        WebApp.offEvent('themeChanged', setThemeParams);
       };
     } else {
-       // Если не в TWA (или на сервере при сборке), используем дефолты и помечаем как готовое
-       setState(prev => ({
-        ...prev,
-        isReady: true,
-        themeParams: SAFE_DEFAULT_THEME,
-      }));
+      // Имитация темы при локальном запуске
+      setThemeParams({
+        bg_color: '#0B0F15',
+        header_bg_color: '#1A1E24',
+        text_color: '#FFFFFF',
+        button_color: '#B06EFF',
+        button_text_color: '#FFFFFF'
+      });
     }
   }, []);
-  
-  // Упрощенный доступ к themeParams для внешних компонентов
-  const themeParams = state.themeParams; 
 
-  const updateTextToSpeak = (text) => {
-    setState(prev => ({ ...prev, textToSpeak: text }));
-  };
+  // 2. Инициализация Firebase Auth
+  useEffect(() => {
+    if (!auth) {
+      console.warn("Firebase Auth not initialized. Cannot proceed with authentication.");
+      setIsAuthReady(true); // Считаем готовым, чтобы не блокировать UI
+      return;
+    }
 
-  const contextValue = {
-    ...state,
-    themeParams,
+    const initAuth = async () => {
+      try {
+        if (initialAuthToken) {
+          // Авторизация с помощью предоставленного Canvas Custom Token
+          await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+          // Анонимный вход, если токен не предоставлен (для тестов вне Canvas)
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Authentication failed:", error);
+      }
+    };
+    initAuth();
+
+    // Listener для отслеживания состояния авторизации
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        // Устанавливаем временный ID, если анонимный вход не удался
+        setUserId(crypto.randomUUID()); 
+      }
+      setIsAuthReady(true); // Теперь Firestore может начать работу
+    });
+
+    return () => unsubscribe();
+  }, [auth]);
+
+
+  const updateTextToSpeak = useCallback((newText) => {
+    setTextToSpeak(newText);
+  }, []);
+
+  const value = {
+    textToSpeak,
     updateTextToSpeak,
+    themeParams,
+    isWebAppReady,
+    // Firestore / Auth
+    db: db,
+    auth: auth,
+    userId,
+    isAuthReady,
+    appId,
   };
 
-  // Показываем контент, только если контекст готов
-  if (!state.isReady) {
-    // Временно покажем лоадер или пустой экран во время инициализации.
-    // Используем только Tailwind-классы, безопасные для SSR.
-    return (
-      <div className="min-h-screen bg-[#0B0F15] text-[#FFFFFF] flex items-center justify-center">
-        <div className="flex space-x-2 animate-pulse">
-            <div className="w-3 h-3 bg-accent-neon rounded-full"></div>
-            <div className="w-3 h-3 bg-accent-neon rounded-full animation-delay-200"></div>
-            <div className="w-3 h-3 bg-accent-neon rounded-full animation-delay-400"></div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <PlayerContext.Provider value={contextValue}>
-      {children}
-    </PlayerContext.Provider>
-  );
+  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 };
 
-// 3. Хук для использования контекста
 export const usePlayer = () => {
   const context = useContext(PlayerContext);
+  // Проверка для отладки, если хук вызван вне провайдера
   if (context === undefined) {
     throw new Error('usePlayer must be used within a PlayerProvider');
   }
