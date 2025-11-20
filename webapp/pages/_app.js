@@ -4,7 +4,6 @@
 import '../styles/globals.css'; 
 
 // ✅ ИСПРАВЛЕНИЕ 1.1: Импортируем провайдеры из новых, логически корректных контекстов
-import { AuthProvider } from '@/context/AuthContext'; 
 import { PlayerProvider } from '@/context/PlayerContext'; 
 
 import Layout from '@/components/Layout'; 
