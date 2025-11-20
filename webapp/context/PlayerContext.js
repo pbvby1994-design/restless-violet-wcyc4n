@@ -1,274 +1,147 @@
-// Файл: webapp/context/PlayerContext.js (Аудио плеер)
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+// Импортируем WebApp динамически или обрабатываем его использование
+import WebApp from '@twa-dev/sdk'; 
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 
-// 1. Создание контекста
-const PlayerContext = createContext();
-
-// 2. Пользовательский хук для использования контекста
-export const usePlayer = () => useContext(PlayerContext);
-
-// 3. Компонент провайдера
-export const PlayerProvider = ({ children }) => {
-  // Состояние аудио
-  const [currentAudioUrl, setCurrentAudioUrl] = useState(null); 
-  const [isPlaying, setIsPlaying] = useState(false);             
-  const [isLoading, setIsLoading] = useState(false);             
-  const [error, setError] = useState(null);                      
-  const [duration, setDuration] = useState(0);                   
-  const [currentTime, setCurrentTime] = useState(0);             
-  
-  // НОВЫЕ СОСТОЯНИЯ ДЛЯ УПРАВЛЕНИЯ ПЛЕЕРОМ (Подготовка к Приоритету 2.2)
-  const [volume, setVolumeState] = useState(1.0); // Громкость (0.0 до 1.0)
-  const [playbackRate, setPlaybackRateState] = useState(1.0); // Скорость (0.5 до 2.0)
-
-  // Ссылка на объект Audio, чтобы управлять воспроизведением
-  const audioRef = useRef(null);
-
-  // --- Функции управления ---
-
-  /**
-   * Обновляет громкость и применяет к аудиоэлементу.
-   */
-  const setVolume = useCallback((newVolume) => {
-    // Убедимся, что значение находится в пределах [0, 1]
-    const safeVolume = Math.min(1.0, Math.max(0.0, newVolume));
-    setVolumeState(safeVolume);
-    if (audioRef.current) {
-      audioRef.current.volume = safeVolume;
-    }
-  }, []);
-
-  /**
-   * Обновляет скорость воспроизведения и применяет к аудиоэлементу.
-   */
-  const setPlaybackRate = useCallback((newRate) => {
-    // Убедимся, что значение находится в пределах [0.5, 2.0]
-    const safeRate = Math.min(2.0, Math.max(0.5, newRate));
-    setPlaybackRateState(safeRate);
-    if (audioRef.current) {
-      audioRef.current.playbackRate = safeRate;
-    }
-  }, []);
-
-
-  /**
-   * Устанавливает новый URL для аудио и запускает воспроизведение.
-   * @param {string} url - URL аудиофайла (Blob URL или внешний URL)
-   */
-  const setAudioUrl = useCallback((url) => {
-    resetPlayer(); // Сбрасываем предыдущий плеер
-    
-    if (!url) return;
-
-    // Инициализируем Audio
-    if (!audioRef.current) {
-      // Используем window.audioPlayer как синглтон
-      if (typeof window !== 'undefined') {
-          window.audioPlayer = new Audio();
-          audioRef.current = window.audioPlayer;
-      }
-    }
-    
-    const audio = audioRef.current;
-    if (audio) {
-      // Устанавливаем текущие настройки
-      audio.volume = volume;
-      audio.playbackRate = playbackRate;
-
-      // Устанавливаем новый URL
-      audio.src = url;
-      
-      // Запускаем воспроизведение
-      audio.play().then(() => {
-        setCurrentAudioUrl(url);
-        setIsPlaying(true);
-        setIsLoading(false);
-      }).catch(e => {
-        console.error("Failed to play audio:", e);
-        setError("Не удалось начать воспроизведение.");
-        setIsLoading(false);
-        setIsPlaying(false);
-      });
-    }
-
-  }, [volume, playbackRate]); 
-
-
-  /**
-   * Функция, которая управляет паузой/воспроизведением.
-   */
-  const togglePlay = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentAudioUrl) return;
-
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play().catch(e => {
-        console.error("Play failed after toggle:", e);
-        setError("Не удалось возобновить воспроизведение.");
-      });
-    }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying, currentAudioUrl]);
-
-  /**
-   * Функция для принудительной остановки и сброса плеера.
-   */
-  const stopSpeech = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      setIsPlaying(false);
-    }
-  }, []);
-
-  /**
-   * Устанавливает URL аудио, не запуская воспроизведение немедленно.
-   * Используется для подготовки плеера при выборе из библиотеки.
-   */
-  const playSpeech = useCallback((url) => {
-    if (!audioRef.current) {
-        if (typeof window !== 'undefined') {
-            window.audioPlayer = new Audio();
-            audioRef.current = window.audioPlayer;
-        }
-    }
-
-    const audio = audioRef.current;
-
-    if (audio && url) {
-        // Если URL не меняется, просто продолжаем/начинаем воспроизведение
-        if (audio.src === url && !isPlaying) {
-            audio.play().then(() => {
-                setIsPlaying(true);
-            }).catch(e => {
-                console.error("Resume play failed:", e);
-                setError("Не удалось возобновить воспроизведение.");
-            });
-            return;
-        }
-        
-        // Если URL изменился, устанавливаем новый и начинаем играть
-        if (audio.src !== url) {
-            setCurrentAudioUrl(url);
-            // Фактическая установка audio.src происходит в MiniPlayer/FullPlayer, 
-            // чтобы избежать гонки состояний и проблем с DOM.
-        }
-        
-        setCurrentAudioUrl(url); 
-        setIsPlaying(true); 
-    }
-
-  }, [isPlaying]);
-
-
-  // --- Эффекты: Прослушивание событий аудиоэлемента ---
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
-    };
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-
-    const handleError = (e) => {
-        console.error("Audio playback error:", e);
-        setError("Ошибка при воспроизведении аудио. Возможно, неверный формат.");
-        setIsPlaying(false);
-        setIsLoading(false);
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-    
-    // Применение настроек
-    audio.volume = volume;
-    audio.playbackRate = playbackRate;
-
-
-    return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-    };
-  }, [volume, playbackRate]);
-
-
-  // Отслеживание состояния isPlaying для синхронизации с audio.paused
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-        setIsPlaying(!audio.paused);
-    }
-  }, [isPlaying]);
-
-  /**
-   * Перемотка на заданную позицию.
-   */
-  const seekTo = useCallback((time) => {
-    const audio = audioRef.current;
-    if (audio && isFinite(time) && time >= 0 && time <= duration) {
-      audio.currentTime = time;
-      setCurrentTime(time);
-    }
-  }, [duration]);
-
-  /**
-   * Сброс всех состояний плеера (при очистке формы)
-   */
-  const resetPlayer = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-    }
-    if (currentAudioUrl && currentAudioUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(currentAudioUrl); 
-    }
-    setCurrentAudioUrl(null);
-    setIsPlaying(false);
-    setIsLoading(false);
-    setError(null);
-    setDuration(0);
-    setCurrentTime(0);
-  }, [currentAudioUrl]); 
-
-  // Объект контекста, который будет передан дочерним элементам
-  const contextValue = {
-    currentAudioUrl,
-    isPlaying,
-    isLoading,
-    error,
-    duration,
-    currentTime,
-    volume, 
-    playbackRate, 
-    setIsLoading, 
-    setError,     
-    setAudioUrl,  
-    setVolume, 
-    setPlaybackRate, 
-    togglePlay,   
-    stopSpeech,   
-    seekTo,       
-    resetPlayer,
-    playSpeech, 
-  };
-
-  return <PlayerContext.Provider value={contextValue}>{children}</PlayerContext.Provider>;
+// --- КОНФИГУРАЦИЯ FIREBASE ИЗ NEXT.JS ENVIRONMENT VARIABLES ---
+const firebaseConfig = {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-export default PlayerProvider;
+// Проверяем, что хотя бы apiKey предоставлен
+const isConfigValid = !!firebaseConfig.apiKey; 
+
+// Старые глобальные переменные для совместимости, но конфигурация берется из env
+const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID || 'default-app-id';
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' 
+    ? __initial_auth_token 
+    : null;
+// -----------------------------------------------------------------
+
+let app, db, auth;
+// Инициализация Firebase ТОЛЬКО на клиенте и только при наличии валидной конфигурации
+if (isConfigValid && typeof window !== 'undefined') {
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    console.log("Firebase initialized successfully on client.");
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+    // Выводим предупреждение, которое вы видели, если инициализация не удалась
+    console.warn("Firebase Auth not initialized on client. Check Vercel/Firebase configuration.");
+  }
+}
+
+// Создание контекста
+const PlayerContext = createContext({
+  textToSpeak: '',
+  updateTextToSpeak: () => {},
+  themeParams: {},
+  isWebAppReady: false,
+  db: null,
+  auth: null,
+  userId: null,
+  isAuthReady: false,
+  appId: 'default-app-id',
+});
+
+// Пользовательский хук для использования контекста
+export const usePlayer = () => useContext(PlayerContext);
+
+// Компонент провайдера
+export const PlayerProvider = ({ children }) => {
+  const [textToSpeak, setTextToSpeak] = useState('');
+  const [themeParams, setThemeParams] = useState({});
+  const [isWebAppReady, setIsWebAppReady] = useState(false);
+  
+  // Состояния для Firebase
+  const [userId, setUserId] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
+  // 1. Инициализация Telegram WebApp SDK (ТОЛЬКО на клиенте)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Инициализация WebApp SDK
+      WebApp.ready();
+      setIsWebAppReady(true);
+      
+      // Чтение параметров темы
+      setThemeParams(WebApp.themeParams || {
+        bg_color: '#0B0F15',
+        header_bg_color: '#1A1E24',
+        text_color: '#FFFFFF'
+      });
+    }
+  }, []);
+
+  // 2. Инициализация Firebase Auth (ТОЛЬКО на клиенте)
+  useEffect(() => {
+    // Блокируем выполнение, если нет объекта auth (конфигурация невалидна или SSR)
+    if (typeof window === 'undefined' || !auth) {
+      if (!auth) console.warn("Firebase Auth not initialized on client. Missing/invalid config.");
+      setIsAuthReady(true); // Считаем готовым для обхода
+      return;
+    }
+
+    const initAuth = async () => {
+      try {
+        if (initialAuthToken) {
+          // Для кастомной аутентификации (редкий случай)
+          await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+          // Основной метод: Анонимная аутентификация
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Authentication failed:", error);
+        // В случае ошибки аутентификации используем заглушку userId
+        setUserId(window.crypto.randomUUID());
+        setIsAuthReady(true);
+      }
+    };
+    initAuth();
+
+    // Слушатель изменений состояния аутентификации
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        // Если пользователь вышел, генерируем временный ID (редкий случай)
+        setUserId(window.crypto.randomUUID()); 
+      }
+      setIsAuthReady(true);
+    });
+
+    return () => unsubscribe();
+  }, [auth]); // Зависит от объекта auth
+
+  // Функция для обновления текста
+  const updateTextToSpeak = useCallback((newText) => {
+    setTextToSpeak(newText);
+  }, []);
+
+  // Объект контекста
+  const value = {
+    textToSpeak,
+    updateTextToSpeak,
+    themeParams,
+    isWebAppReady,
+    db: db,
+    auth: auth,
+    userId, // UID аутентифицированного пользователя
+    isAuthReady, // Флаг готовности аутентификации
+    appId, // ID приложения (для информации)
+  };
+
+  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+};
+
+export default PlayerContext;
