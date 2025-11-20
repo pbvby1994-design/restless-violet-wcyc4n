@@ -19,9 +19,10 @@ const Library = dynamic(() => import('@/components/Library'), {
 });
 const MiniPlayer = dynamic(() => import('@/components/MiniPlayer'), { 
     ssr: false,
-    loading: () => null // Не показываем ничего во время загрузки, чтобы избежать мерцания
+    loading: () => null
 });
 
+// ... (остальной код TabButton и Home остается без изменений) ...
 
 // Компоненты для навигации
 const TabButton = ({ tabName, activeTab, onClick }) => {
@@ -79,7 +80,6 @@ const Home = () => {
             </div>
 
             {/* 3. Мини-плеер (теперь динамический) */}
-            {/* Размещаем его внизу с фиксированным позиционированием */}
             <div className="fixed bottom-0 left-0 right-0 z-50">
                 <MiniPlayer />
             </div>
