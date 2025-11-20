@@ -7,6 +7,7 @@
 
 /* 1. Base Styles for Telegram Mini App 
   Используем переменные Telegram SDK для нативной поддержки темы.
+  Запасные (fallback) цвета теперь жестко закодированы, чтобы избежать ошибки theme()
 */
 body {
   /* Используем переменные Telegram: 
@@ -14,8 +15,8 @@ body {
     --tg-theme-text-color для основного текста
     Если SDK не работает, используем запасные цвета из конфигурации
   */
-  background-color: var(--tg-theme-bg-color, #0B0F15); 
-  color: var(--tg-theme-text-color, #FFFFFF); 
+  background-color: var(--tg-theme-bg-color, #0B0F15); /* Fallback: bg-bg-DEFAULT */
+  color: var(--tg-theme-text-color, #FFFFFF); /* Fallback: txt-primary */
   
   /* Устанавливаем шрифт Inter */
   font-family: 'Inter', sans-serif;
@@ -29,44 +30,49 @@ body {
 
 /* Переопределяем некоторые стили для лучшей интеграции в Telegram */
 input, textarea, button, select {
-  border-color: var(--tg-theme-hint-color, #9EA8B7); 
-  color: var(--tg-theme-text-color, #FFFFFF); 
-  background-color: transparent; 
+  /* Используем цвета Telegram для инпутов, если они доступны */
+  border-color: var(--tg-theme-hint-color, #5E6470) !important; /* Fallback: txt-muted */
 }
 
-/* 2. Custom Tailwind Components/Utilities */
+/* 2. Custom Components */
 
-/* Стиль для кнопок, использующих акцентный цвет (например, "Генерировать")
-  Имя класса: button-primary
-*/
-.button-primary {
-  /* Применяем основные классы Tailwind */
-  @apply font-bold py-3 px-6 rounded-xl transition-all duration-200 ease-in-out;
-  /* Используем переменные Telegram для цвета */
-  background-color: var(--tg-theme-button-color, #B06EFF); 
+/* Стиль для кнопки приложения, адаптированный под Telegram */
+.app-button {
+  @apply w-full flex justify-center items-center py-3 px-4 rounded-xl font-semibold text-lg transition-all duration-200;
+  
+  background-color: var(--tg-theme-button-color, #A46CFF); /* Fallback: accent-light */
   color: var(--tg-theme-button-text-color, #FFFFFF); 
-  /* Добавляем эффект тени, используя цвет из tailwind.config.js */
-  box-shadow: 0 0 15px theme('colors.accent-neon.DEFAULT' / 0.4); 
+  /* ФИКС ОШИБКИ: Заменили theme('colors.accent-neon.DEFAULT' / 0.4) на прямой RGBA. 
+     #B06EFF (accent-neon) = rgb(176, 110, 255). Opacity 0.4. 
+  */
+  box-shadow: 0 0 15px rgba(176, 110, 255, 0.4); 
 }
 
-.button-primary:hover:not(:disabled) {
-    /* Добавляем эффект hover через Tailwind, используя акцентный цвет */
-    @apply bg-accent-light; 
-    /* Убираем тень при hover */
-    box-shadow: 0 0 10px theme('colors.accent-neon.DEFAULT' / 0.6); 
+/* Стили для hover/active */
+.app-button:hover:not(:disabled) {
+  /* Используем accent-light для hover */
+  background-color: var(--tg-theme-button-color, #A46CFF);
+  opacity: 0.9;
+}
+.app-button:active:not(:disabled) {
+  opacity: 0.8;
 }
 
-.button-primary:disabled {
-  @apply cursor-not-allowed opacity-60 shadow-none;
-  background-color: var(--tg-theme-hint-color, #5E6470) !important; 
-  color: #FFFFFF !important;
+/* Стиль для неактивной кнопки */
+.app-button:disabled {
+  background-color: var(--tg-theme-hint-color, #5E6470); /* Fallback: txt-muted */
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
-/* Стиль для карточек/контейнеров с эффектом "стекла"
+/* Стиль для карточки с эффектом "стекла"
 */
 .card-glass {
-  background-color: rgba(255, 255, 255, 0.03); 
+  background-color: rgba(255, 255, 255, 0.03); /* Fallback: bg-card */
+  /* Эффект матового стекла */
   backdrop-filter: blur(8px);
+  /* Легкая граница */
   border: 1px solid rgba(255, 255, 255, 0.1);
   @apply rounded-xl shadow-card p-4 transition-all duration-300;
 }
@@ -74,32 +80,37 @@ input, textarea, button, select {
 /* Стиль для TextArea 
 */
 .textarea-input {
-  @apply w-full resize-none p-3 rounded-lg border-2 focus:ring-accent-neon text-txt-primary placeholder-txt-secondary transition-all duration-200;
-  /* Используем переменные Telegram для цвета фона и границы */
-  background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.04)); 
-  border-color: var(--tg-theme-hint-color, #5E6470) !important; 
-  /* Устанавливаем цвет фокуса через Tailwind */
-  @apply focus:border-accent-neon; 
+  @apply w-full resize-none p-3 rounded-lg border-2 border-txt-muted/50 focus:border-accent-neon focus:ring-accent-neon bg-bg-glass text-txt-primary placeholder-txt-secondary transition-all duration-200;
+  background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.04)); /* Fallback: bg-glass */
+  border-color: var(--tg-theme-hint-color, #5E6470) !important; /* Fallback: txt-muted */
 }
 
 /* Добавляем стили для анимации эквалайзера в компоненте плеера */
 .bar {
-  @apply w-1 h-full rounded-full inline-block mx-[1px];
-  background-color: var(--tg-theme-button-color, #B06EFF); 
-  animation: wave 1.5s ease-in-out infinite;
+  @apply w-1 h-full bg-accent-neon rounded-full inline-block mx-[1px];
+  background-color: var(--tg-theme-button-color, #B06EFF); /* Fallback: accent-neon */
+  /* Animation properties, adjust as needed */
+  animation: equalize 0.8s ease-in-out infinite alternate;
 }
 
-.bar:nth-child(2) { animation-delay: -1.2s; }
-.bar:nth-child(3) { animation-delay: -0.9s; }
-.bar:nth-child(4) { animation-delay: -0.6s; }
-.bar:nth-child(5) { animation-delay: -0.3s; }
-
-@keyframes wave {
-  0%, 100% { transform: scaleY(0.4); }
-  50% { transform: scaleY(1.0); }
+/* Создаем ключи анимации для эффекта эквалайзера */
+@keyframes equalize {
+  0% {
+    transform: scaleY(0.1);
+  }
+  100% {
+    transform: scaleY(1);
+  }
 }
 
-/* Дополнительно: чтобы избежать сдвигов макета, используем min-h-screen */
-#root, #__next {
-  min-height: 100vh;
-}
+/* Задержки для создания эффекта волны (как в оригинальном коде) */
+.bar:nth-child(1) { animation-delay: 0s; }
+.bar:nth-child(2) { animation-delay: -0.6s; }
+.bar:nth-child(3) { animation-delay: -1.2s; }
+.bar:nth-child(4) { animation-delay: -0.4s; }
+.bar:nth-child(5) { animation-delay: -1s; }
+.bar:nth-child(6) { animation-delay: -0.5s; }
+.bar:nth-child(7) { animation-delay: -1.1s; }
+.bar:nth-child(8) { animation-delay: -0.3s; }
+.bar:nth-child(9) { animation-delay: -0.9s; }
+.bar:nth-child(10) { animation-delay: -0.2s; }
