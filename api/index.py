@@ -3,12 +3,13 @@
 import os
 import io
 import logging
+# 🛑 УДАЛЕНО: import requests 
 from fastapi import FastAPI, HTTPException
-# 🛑 ИЗМЕНЕНИЕ: Используем StreamingResponse вместо FileResponse
 from fastapi.responses import StreamingResponse, JSONResponse 
 from fastapi.middleware.cors import CORSMiddleware
 from gtts import gTTS
 import uvicorn 
+# 🛑 УДАЛЕНО: from nanoid import generate
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,7 +30,6 @@ app.add_middleware(
 def read_root():
     return {"message": "TTS API is running on Vercel"}
 
-# ✅ ИСПРАВЛЕНО: Убран конечный слэш
 @app.post("/api/tts/generate") 
 async def generate_speech(data: dict):
     """Эндпоинт для генерации речи из текста."""
@@ -50,17 +50,17 @@ async def generate_speech(data: dict):
         tts.write_to_fp(mp3_fp)
         mp3_fp.seek(0)
         
-        # ✅ ИСПРАВЛЕНИЕ: Возвращаем StreamingResponse
+        # Возвращаем StreamingResponse
         return StreamingResponse(
             mp3_fp, 
             media_type="audio/mp3", 
             headers={
                 "Content-Disposition": "attachment; filename=speech.mp3",
-                "Access-Control-Expose-Headers": "Content-Disposition"
+                "Cache-Control": "no-store, max-age=0, must-revalidate"
             }
         )
-
     except Exception as e:
-        logging.error(f"TTS generation error: {e}")
-        # Возвращаем 500 ошибку с деталями для отладки
-        raise HTTPException(status_code=500, detail=f"TTS generation error: {e}")
+        logging.error(f"TTS Generation Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate speech audio.")
+
+# 🛑 УДАЛЕНЫ эндпоинты /api/blob/sign-upload и /api/blob/delete
