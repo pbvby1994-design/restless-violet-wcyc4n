@@ -1,65 +1,57 @@
-// Файл: webapp/pages/_app.js
-// Основной файл приложения Next.js.
+// Файл: webapp/pages/_app.js (Финальная версия с динамическими импортами)
 
 import '../styles/globals.css'; 
+
+import dynamic from 'next/dynamic';
 import Head from 'next/head'; 
-import dynamic from 'next/dynamic'; 
+// Импорт Vercel Analytics
+import { Analytics } from '@vercel/analytics/react'; 
 
-// 🛑 ВАЖНО: УДАЛЯЕМ статический импорт PlayerProvider и Layout.
+// 1. Динамический импорт PlayerProvider (из-за TWA SDK, Firebase и Audio API)
+// PlayerProvider находится в файле context/PlayerContext.js и экспортируется по имени.
+const DynamicPlayerProvider = dynamic(
+  // Используем .then(mod => mod.PlayerProvider), так как это именованный экспорт
+  () => import('@/context/PlayerContext').then(mod => mod.PlayerProvider), 
+  { 
+    ssr: false, // ⬅️ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Отключаем SSR
+    loading: () => <div className="flex justify-center items-center h-screen bg-bg-default text-txt-secondary">Загрузка контекста...</div>
+  }
+);
 
-// 1. Динамический импорт Layout (содержит WebApp.setHeaderColor и т.д.)
-const DynamicLayout = dynamic(() => import('@/components/Layout'), { 
-  ssr: false, 
-  loading: () => null
-});
-
-/**
- * 2. Динамический компонент-обертка для всего клиентского кода.
- * Он выполняет динамический импорт PlayerProvider, чтобы избежать
- * загрузки WebApp SDK и Firebase на сервере.
- */
-const DynamicClientOnlyWrapper = dynamic(
-    async () => {
-        // ✅ КЛЮЧЕВОЙ ШАГ: Динамический импорт PlayerProvider ВНУТРИ dynamic()
-        // Это предотвращает загрузку WebApp SDK на сервере.
-        const { PlayerProvider } = await import('@/context/PlayerContext');
-        
-        // Возвращаем компонент-обертку, который использует PlayerProvider и DynamicLayout
-        const ClientOnlyWrapper = ({ Component, pageProps }) => (
-            <PlayerProvider>
-                <DynamicLayout>
-                    <Component {...pageProps} />
-                </DynamicLayout>
-            </PlayerProvider>
-        );
-        return ClientOnlyWrapper;
-    },
-    {
-        ssr: false, // <-- Ключевой параметр! Отключаем Server-Side Rendering
-        loading: () => (
-            <div className="flex justify-center items-center h-screen text-lg text-txt-primary bg-bg-default">
-                Загрузка приложения...
-            </div>
-        )
-    }
+// 2. Динамический импорт Layout (из-за использования usePlayer() и WebApp SDK)
+// Layout находится в components/Layout.js и экспортируется по умолчанию.
+const DynamicLayout = dynamic(
+  () => import('@/components/Layout'),
+  { 
+    ssr: false, // ⬅️ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Отключаем SSR
+    loading: () => <div className="flex justify-center items-center h-screen bg-bg-default text-txt-secondary">Инициализация макета...</div>
+  }
 );
 
 
 /**
- * Главный компонент приложения.
+ * Главный компонент приложения Next.js.
  */
 function App({ Component, pageProps }) {
   return (
-    <>
+    // 1. PlayerProvider должен быть самым внешним для всего приложения
+    <DynamicPlayerProvider>
       <Head>
         <title>TTS App</title>
+        {/* Настройка viewport критична для TWA */}
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
       </Head>
       
-      {/* Весь клиентский контент загружается динамически */}
-      <DynamicClientOnlyWrapper Component={Component} pageProps={pageProps} />
-    </>
+      {/* 2. Layout оборачивает контент страницы */}
+      <DynamicLayout>
+        <Component {...pageProps} />
+      </DynamicLayout>
+
+      {/* Vercel Analytics */}
+      <Analytics />
+      
+    </DynamicPlayerProvider>
   );
 }
 
