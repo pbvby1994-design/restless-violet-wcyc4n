@@ -1,12 +1,12 @@
 // Файл: webapp/context/PlayerContext.js
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import WebApp from '@twa-dev/sdk';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+// Импортируем WebApp динамически или обрабатываем его использование
+import WebApp from '@twa-dev/sdk'; 
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
-// --- Глобальные переменные из среды Canvas (обязательно для использования) ---
-// Инициализация Firebase Config и App ID
+// --- Глобальные переменные из среды Canvas ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
     ? JSON.parse(__firebase_config) 
     : {};
@@ -14,23 +14,22 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' 
     ? __initial_auth_token 
     : null;
-// --------------------------------------------------------------------------
+// ---------------------------------------------
 
-
-// Инициализация Firebase, если конфигурация доступна
 let app, db, auth;
-if (Object.keys(firebaseConfig).length > 0) {
+if (Object.keys(firebaseConfig).length > 0 && typeof window !== 'undefined') {
+  // Инициализация Firebase ТОЛЬКО на клиенте, чтобы избежать ошибок
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     auth = getAuth(app);
-    console.log("Firebase initialized successfully.");
+    console.log("Firebase initialized successfully on client.");
   } catch (error) {
     console.error("Firebase initialization failed:", error);
   }
 }
 
-// Создание контекста с заглушками (заглушка предотвращает ошибки при использовании до инициализации)
+// Создание контекста
 const PlayerContext = createContext({
   textToSpeak: '',
   updateTextToSpeak: () => {},
@@ -46,17 +45,18 @@ const PlayerContext = createContext({
 
 export const PlayerProvider = ({ children }) => {
   const [textToSpeak, setTextToSpeak] = useState('');
-  const [themeParams, setThemeParams] = useState(WebApp.themeParams || {});
-  const [isWebAppReady, setIsWebAppReady] = useState(WebApp.ready);
+  // Инициализируем themeParams заглушкой, чтобы избежать ошибок SSR
+  const [themeParams, setThemeParams] = useState({});
+  const [isWebAppReady, setIsWebAppReady] = useState(false);
   
   // Auth & Firestore State
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
 
-  // 1. Инициализация WebApp SDK
+  // 1. Инициализация WebApp SDK (ТОЛЬКО на клиенте)
   useEffect(() => {
-    if (WebApp.initDataUnsafe) {
+    if (typeof window !== 'undefined' && WebApp.initDataUnsafe) {
       WebApp.ready();
       WebApp.expand();
       setIsWebAppReady(true);
@@ -67,12 +67,11 @@ export const PlayerProvider = ({ children }) => {
         setThemeParams(newThemeParams);
       });
 
-      // Очистка при размонтировании
       return () => {
         WebApp.offEvent('themeChanged', setThemeParams);
       };
     } else {
-      // Имитация темы при локальном запуске
+      // Имитация темы при SSR или локальном запуске без TWA
       setThemeParams({
         bg_color: '#0B0F15',
         header_bg_color: '#1A1E24',
@@ -83,21 +82,20 @@ export const PlayerProvider = ({ children }) => {
     }
   }, []);
 
-  // 2. Инициализация Firebase Auth
+  // 2. Инициализация Firebase Auth (ТОЛЬКО на клиенте)
   useEffect(() => {
-    if (!auth) {
-      console.warn("Firebase Auth not initialized. Cannot proceed with authentication.");
-      setIsAuthReady(true); // Считаем готовым, чтобы не блокировать UI
+    if (typeof window === 'undefined' || !auth) {
+      // Блокируем выполнение на сервере
+      if (!auth) console.warn("Firebase Auth not initialized on client.");
+      setIsAuthReady(true); // Считаем готовым для SSR/локальных тестов
       return;
     }
 
     const initAuth = async () => {
       try {
         if (initialAuthToken) {
-          // Авторизация с помощью предоставленного Canvas Custom Token
           await signInWithCustomToken(auth, initialAuthToken);
         } else {
-          // Анонимный вход, если токен не предоставлен (для тестов вне Canvas)
           await signInAnonymously(auth);
         }
       } catch (error) {
@@ -106,15 +104,13 @@ export const PlayerProvider = ({ children }) => {
     };
     initAuth();
 
-    // Listener для отслеживания состояния авторизации
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
       } else {
-        // Устанавливаем временный ID, если анонимный вход не удался
         setUserId(crypto.randomUUID()); 
       }
-      setIsAuthReady(true); // Теперь Firestore может начать работу
+      setIsAuthReady(true);
     });
 
     return () => unsubscribe();
@@ -130,7 +126,6 @@ export const PlayerProvider = ({ children }) => {
     updateTextToSpeak,
     themeParams,
     isWebAppReady,
-    // Firestore / Auth
     db: db,
     auth: auth,
     userId,
@@ -143,7 +138,6 @@ export const PlayerProvider = ({ children }) => {
 
 export const usePlayer = () => {
   const context = useContext(PlayerContext);
-  // Проверка для отладки, если хук вызван вне провайдера
   if (context === undefined) {
     throw new Error('usePlayer must be used within a PlayerProvider');
   }
