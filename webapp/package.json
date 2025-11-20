@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@emotion/is-prop-valid": "^1.2.9",  <-- ДОБАВИТЬ ЭТУ СТРОКУ
+    "@emotion/is-prop-valid": "^1.2.9",
     "@twa-dev/sdk": "^7.0.0",
     "@vercel/analytics": "^1.2.2",
     "firebase": "^10.11.1",
