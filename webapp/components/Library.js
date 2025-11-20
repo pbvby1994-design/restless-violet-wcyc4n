@@ -1,16 +1,17 @@
 // Файл: webapp/components/Library.js
 import React, { useState, useEffect, useCallback } from 'react';
-// Импортируем только необходимые функции Firestore, но не его инициализацию
-import { collection, query, onSnapshot, doc, deleteDoc, orderBy, serverTimestamp } from 'firebase/firestore'; 
+// Оставляем только нужные импорты Firestore
+import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore'; 
 import { Trash2, Loader2, Play, StopCircle } from 'lucide-react';
-// ✅ Используем хук useAuth для получения инициализированных объектов из PlayerContext
-import { useAuth, usePlayer } from '@/context/PlayerContext'; 
 
-// --- Вспомогательные функции ---
+// ✅ ИСПРАВЛЕНИЕ: Импортируем usePlayer и useAuth из PlayerContext
+import { usePlayer, useAuth } from '@/context/PlayerContext'; 
 
-// Функция для форматирования даты
+// --- УДАЛЕНО: Вся локальная конфигурация и импорт Firebase Auth/App ---
+// УДАЛЕНО: const appId, const firebaseConfig, const initialAuthToken, initializeApp, getAuth и т.д.
+
+// Функция для форматирования даты (оставляем)
 const formatDate = (timestamp) => {
-    // Проверяем, что timestamp существует и имеет метод toDate() (для Firestore Timestamp)
     if (!timestamp || !timestamp.toDate) return 'Неизвестная дата';
     const date = timestamp.toDate();
     return date.toLocaleDateString('ru-RU', {
@@ -22,212 +23,181 @@ const formatDate = (timestamp) => {
     });
 };
 
-// Функция для форматирования времени (из FullPlayer.js, чтобы избежать ошибок)
-const formatDuration = (seconds) => {
-    if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
-    const minutes = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
-};
-
-
-// --- Основной компонент Библиотека ---
-const Library = () => {
-    // ✅ Получаем состояние плеера для управления воспроизведением
-    const { 
-        currentUrl: currentAudioUrl, // Переименуем для ясности
-        isPlaying, 
-        playSpeech, 
-        stopSpeech,
-        setError 
-    } = usePlayer(); 
+// Компонент теперь принимает onPlay из pages/library.js
+const Library = ({ onPlay }) => {
+    // 1. ✅ ИСПОЛЬЗУЕМ: Состояние плеера
+    const { currentUrl, isPlaying, stopSpeech } = usePlayer();
     
-    // ✅ Получаем инициализированные объекты из контекста
-    const { db, auth, userId, isAuthReady } = useAuth(); 
-
+    // 2. ✅ ИСПОЛЬЗУЕМ: Auth и DB из нового useAuth хука
+    const { db, userId, isAuthReady } = useAuth(); // Больше не нужно локально инициализировать!
+    
+    // Остальные состояния
     const [records, setRecords] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setLocalError] = useState(null);
+    const [error, setError] = useState(null);
+    
+    // --- УДАЛЕНО: Локальные состояния DB/Auth и useEffect для их инициализации ---
 
-    // 1. Загрузка записей из Firestore
+    // 3. Эффект для подписки на изменения в Firestore
     useEffect(() => {
-        // Загрузка возможна только, если Auth готов И у нас есть ID пользователя И объект DB
-        if (!isAuthReady || !userId || !db) {
-            if (isAuthReady) {
-                // Если Auth готов, но нет userId (что странно), или нет db (что означает сбой инициализации)
-                setLocalError("База данных или пользователь не инициализированы.");
-            }
-            // Выходим до тех пор, пока не получим все данные
-            return;
-        }
-
-        const recordsCollectionRef = collection(db, 'user_records');
-        
-        // Создаем запрос: только записи пользователя, отсортированные по дате создания
-        // ✅ ВАЖНО: Мы запрашиваем ВСЕ записи, и только правила Firestore ограничат доступ
-        const q = query(
-            recordsCollectionRef,
-            // orderBy('createdAt', 'desc') // Добавьте это, если хотите сортировать
-        );
-        
-        // Подписка на изменения в коллекции (onSnapshot)
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedRecords = [];
-            snapshot.forEach((doc) => {
-                // Добавляем ID документа к данным
-                fetchedRecords.push({ id: doc.id, ...doc.data() });
-            });
-            
-            // Фильтруем на клиенте только те записи, где userId совпадает
-            // Это ДОПОЛНИТЕЛЬНАЯ мера, основное ограничение - в Правилах Firestore.
-            const userRecords = fetchedRecords.filter(record => record.userId === userId);
-
-            setRecords(userRecords);
-            setIsLoading(false);
-            setLocalError(null);
-        }, (err) => {
-            console.error("Failed to fetch records:", err);
-            setLocalError("Ошибка загрузки записей: " + err.message);
-            setIsLoading(false);
-        });
-
-        // Функция очистки (отписка)
-        return () => unsubscribe();
-    }, [isAuthReady, userId, db]);
-
-
-    // 2. Функция удаления записи
-    const handleDelete = useCallback(async (recordId) => {
-        if (!db || !userId) {
-            setLocalError("Ошибка: Невозможно удалить. Пользователь или DB не инициализированы.");
+        // Запускаем подписку только после того, как аутентификация готова
+        if (!isAuthReady || !db) {
+            // Если не готово, можем просто выйти или показать индикатор загрузки
+            if (!isAuthReady) setIsLoading(true); 
             return;
         }
 
         try {
-            await deleteDoc(doc(db, 'user_records', recordId));
-            // Ошибка Missing or insufficient permissions. будет возникать здесь,
-            // если правила Firestore настроены неправильно.
+            setIsLoading(true);
+            setError(null);
+
+            // Создаем путь к коллекции: /users/{userId}/records
+            const recordsCollectionRef = collection(db, 'users', userId, 'records');
+            const recordsQuery = query(recordsCollectionRef); 
+
+            // Подписываемся на изменения в реальном времени
+            const unsubscribe = onSnapshot(recordsQuery, (snapshot) => {
+                const fetchedRecords = snapshot.docs.map(d => ({
+                    id: d.id,
+                    ...d.data()
+                }));
+                // Сортировка по дате создания
+                fetchedRecords.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate()); 
+                setRecords(fetchedRecords);
+                setIsLoading(false);
+            }, (err) => {
+                console.error("Firestore subscription error:", err);
+                setError("Ошибка загрузки библиотеки. Проверьте соединение.");
+                setIsLoading(false);
+            });
+
+            // Функция отписки, которая будет вызвана при размонтировании компонента
+            return () => unsubscribe();
         } catch (e) {
-            console.error("Error removing document: ", e);
-            setLocalError("Недостаточно прав для удаления записи. Проверьте правила Firestore.");
+            console.error("Setup Firestore error:", e);
+            setError("Ошибка инициализации базы данных.");
+            setIsLoading(false);
+            return () => {};
+        }
+
+    }, [isAuthReady, db, userId]); // Зависимости: db, userId, isAuthReady
+
+    // 4. Функция удаления записи
+    const handleDelete = useCallback(async (recordId, ownerId) => {
+        // Проверяем наличие DB, ID пользователя и совпадение ID владельца
+        if (!db || !userId || userId !== ownerId) return;
+
+        if (window.confirm("Вы уверены, что хотите удалить эту запись?")) {
+            try {
+                // Путь к документу: /users/{userId}/records/{recordId}
+                const recordRef = doc(db, 'users', userId, 'records', recordId);
+                await deleteDoc(recordRef);
+            } catch (e) {
+                console.error("Error deleting record:", e);
+                setError("Не удалось удалить запись.");
+            }
         }
     }, [db, userId]);
 
 
-    // 3. Функция воспроизведения записи (передаем в BookCard)
-    const handlePlayRecord = useCallback((record) => {
-        // Устанавливаем текущий URL и текст для плеера
-        playSpeech(record.audioUrl, record.text); 
-    }, [playSpeech]);
-
-
-    // --- Рендеринг ---
-    if (!isAuthReady) {
+    // 5. Визуализация
+    if (isLoading) {
         return (
             <div className="text-center p-8 text-txt-secondary">
-                <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-accent-neon" />
-                <p>Инициализация пользователя...</p>
+                <Loader2 className="animate-spin h-8 w-8 mx-auto text-accent-neon" />
+                <p className="mt-4">Загрузка библиотеки...</p>
+            </div>
+        );
+    }
+    
+    if (error) {
+        return (
+            <div className="text-center p-8 bg-red-800/50 text-red-300 border border-red-500 rounded-xl">
+                {error}
+            </div>
+        );
+    }
+
+    if (records.length === 0) {
+        return (
+            <div className="text-center p-8 text-txt-secondary rounded-xl border border-white/10 bg-bg-glass">
+                <p className="text-lg font-semibold mb-2">Библиотека пуста</p>
+                <p>Здесь будут отображаться ваши сохраненные аудиозаписи.</p>
+                <p className="mt-4 text-xs text-txt-muted">Начните с вкладки "Генератор речи".</p>
             </div>
         );
     }
 
     return (
-        <div className="p-4 max-w-lg mx-auto min-h-[300px]">
-            <h2 className="text-2xl font-bold mb-4 text-txt-primary">Моя Библиотека</h2>
+        <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-txt-primary">Моя Библиотека ({records.length})</h2>
+            <p className="text-txt-secondary text-sm">Здесь хранятся ваши голосовые записи. Нажмите Play для воспроизведения.</p>
             
-            {error && (
-                <div className="p-3 bg-red-800/50 text-red-300 border border-red-500 rounded-lg mb-4">
-                    {error}
-                </div>
-            )}
-            
-            {isLoading && !error && (
-                <div className="text-center p-8 text-txt-secondary">
-                    <Loader2 className="animate-spin h-8 w-8 mx-auto mb-4 text-accent-neon" />
-                    <p>Загрузка записей...</p>
-                </div>
-            )}
-            
-            {!isLoading && records.length === 0 && (
-                <div className="text-center p-8 text-txt-secondary border border-dashed border-txt-muted/30 rounded-lg">
-                    <p className="text-lg mb-2">Библиотека пуста</p>
-                    <p className="text-sm">Сгенерируйте и сохраните аудио на вкладке "Генератор речи".</p>
-                </div>
-            )}
+            {/* Список записей */}
+            <div className="grid grid-cols-1 gap-3">
+                {records.map((record) => {
+                    const isCurrent = record.audioUrl === currentUrl;
+                    const isOwner = record.userId === userId; 
 
-            {!isLoading && records.length > 0 && (
-                <div className="space-y-4">
-                    {records.map((record) => {
-                        const isCurrent = record.audioUrl === currentAudioUrl;
-                        const isOwner = record.userId === userId; // Всегда true, но для безопасности
-
-                        return (
-                            // Используем div вместо BookCard для упрощения
-                            <div 
-                                key={record.id}
-                                className={`
-                                    flex items-center justify-between p-3 rounded-xl border transition-all duration-300
-                                    ${isCurrent 
-                                        ? 'border-accent-neon bg-accent-neon/10 shadow-neon-sm' 
-                                        : 'border-white/10 bg-bg-card hover:bg-white/5'
-                                    }
-                                `}
-                            >
-                                {/* Левая часть: Информация */}
-                                <div className="min-w-0 flex-1 pr-4">
-                                    <h3 className="font-semibold text-txt-primary truncate">
-                                        {/* Используем первые 50 символов как заголовок */}
-                                        {record.text.length > 50 
-                                            ? record.text.substring(0, 50) + '...' 
-                                            : record.text
-                                        }
-                                    </h3>
-                                    <p className="text-xs text-txt-muted mt-0.5">
-                                        {formatDate(record.createdAt)} • {formatDuration(record.duration || 0)}
-                                    </p>
-                                </div>
-
-                                {/* Правая часть: Кнопки управления */}
-                                <div className="flex space-x-2 flex-shrink-0">
-                                    {/* Кнопка Play/Stop */}
-                                    <button 
-                                        className={`p-2 rounded-full transition-colors duration-200 ${
-                                            isCurrent && isPlaying 
-                                                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/40'
-                                                : 'bg-accent-neon/20 text-accent-neon hover:bg-accent-neon/40'
-                                        }`}
-                                        onClick={() => {
-                                            if (isCurrent && isPlaying) {
-                                                stopSpeech();
-                                            } else {
-                                                handlePlayRecord(record);
-                                            }
-                                        }}
-                                        title={isCurrent && isPlaying ? "Остановить" : "Воспроизвести"}
-                                    >
-                                        {isCurrent && isPlaying ? (
-                                            <StopCircle className="h-5 w-5" />
-                                        ) : (
-                                            <Play className="h-5 w-5" />
-                                        )}
-                                    </button>
-
-                                    {/* Кнопка Удаления (только для владельца) */}
-                                    {isOwner && (
-                                        <button 
-                                            className="p-2 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors duration-200"
-                                            onClick={() => handleDelete(record.id)}
-                                            title="Удалить мою запись"
-                                        >
-                                            <Trash2 className="h-5 w-5" />
-                                        </button>
-                                    )}
-                                </div>
+                    return (
+                        <div 
+                            key={record.id} 
+                            className="p-3 bg-bg-glass rounded-xl border border-white/10 shadow-lg flex items-center justify-between transition-transform duration-200 hover:scale-[1.01]"
+                        >
+                            {/* Информация о записи */}
+                            <div className="flex-1 min-w-0 pr-4">
+                                <p className="font-semibold text-txt-primary truncate" title={record.title}>
+                                    {record.title}
+                                </p>
+                                <p className="text-xs text-txt-muted mt-1">
+                                    Создано: {formatDate(record.createdAt)}
+                                </p>
+                                <p className="text-xs text-txt-secondary mt-1 truncate max-w-full">
+                                    {record.text.substring(0, 50)}...
+                                </p>
                             </div>
-                        );
-                    })}
-                </div>
-            )}
+
+                            {/* Кнопки действий */}
+                            <div className="flex items-center space-x-2 flex-shrink-0">
+                                {/* Кнопка Воспроизведения/Остановки */}
+                                <button 
+                                    className={`p-2 rounded-full transition-colors duration-200 ${
+                                        isCurrent && isPlaying 
+                                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/40'
+                                            : 'bg-accent-neon/20 text-accent-neon hover:bg-accent-neon/40'
+                                    }`}
+                                    onClick={() => {
+                                        if (isCurrent && isPlaying) {
+                                            stopSpeech();
+                                        } else {
+                                            // Вызываем onPlay из родительского компонента
+                                            onPlay(record); 
+                                        }
+                                    }}
+                                    title={isCurrent && isPlaying ? "Остановить" : "Воспроизвести"}
+                                >
+                                    {isCurrent && isPlaying ? (
+                                        <StopCircle className="h-5 w-5" />
+                                    ) : (
+                                        <Play className="h-5 w-5" />
+                                    )}
+                                </button>
+
+                                {/* Кнопка Удаления (только для владельца) */}
+                                {isOwner && (
+                                    <button 
+                                        className="p-2 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors duration-200"
+                                        onClick={() => handleDelete(record.id, record.userId)}
+                                        title="Удалить мою запись"
+                                    >
+                                        <Trash2 className="h-5 w-5" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 };
