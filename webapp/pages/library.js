@@ -2,7 +2,8 @@
 import { useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
-import { usePlayer } from '../context/PlayerContext';
+// ✅ ИСПРАВЛЕНИЕ: Используем PlayerContext
+import { usePlayer } from '../context/PlayerContext'; 
 import { motion } from "framer-motion";
 
 // Динамический импорт Layout для избежания SSR ошибок с Telegram SDK
@@ -21,14 +22,16 @@ import PlayerControl from '../components/Player';
 
 export default function LibraryPage() {
     const router = useRouter();
-    const { setAudioUrl, setError } = usePlayer();
+    // Получаем playSpeech, который теперь управляет воспроизведением из контекста
+    const { playSpeech, setError } = usePlayer(); 
     
     // Функция для воспроизведения аудио из библиотеки
     const handlePlayBook = useCallback((book) => {
         try {
             // Аудиофайлы в библиотеке должны хранить URL
             if (book.audioUrl) {
-                setAudioUrl(book.audioUrl);
+                // Вызываем playSpeech, передавая URL и заголовок (для отображения в плеере)
+                playSpeech(book.audioUrl, book.title || 'Библиотечная запись');
             } else {
                 setError("Аудиофайл не найден в записи.");
             }
@@ -36,7 +39,7 @@ export default function LibraryPage() {
             console.error("Failed to play book:", e);
             setError("Не удалось начать воспроизведение.");
         }
-    }, [setAudioUrl, setError]);
+    }, [playSpeech, setError]);
     
     // Эффект нажатия
     const tapEffect = { scale: 0.95 };
