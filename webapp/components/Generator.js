@@ -1,14 +1,18 @@
 // Файл: webapp/components/Generator.js
 import React, { useState, useCallback } from 'react';
 import { usePlayer } from '@/context/PlayerContext';
-import { Loader2 } from 'lucide-react'; // Используем lucide-react для иконок
+import { Loader2 } from 'lucide-react'; // Импорт иконки загрузки
 
 // --- API Configuration ---
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=`;
-const API_KEY = ""; // Canvas runtime provides this
+// Используем пустой API_KEY, который будет предоставлен средой Canvas.
+const API_KEY = ""; 
+// Для стабильности, если среда не предоставит ключ, используем заглушку, 
+// но в Canvas она всегда будет заменена.
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
 
-// --- Utility Functions for Audio Conversion ---
-// (Взято из инструкции, необходимо для декодирования PCM в WAV)
+
+// --- Utility Functions for Audio Conversion (Unchanged, necessary for TTS) ---
+// Вспомогательные функции для преобразования Base64 PCM в WAV
 function base64ToArrayBuffer(base64) {
     const binaryString = atob(base64);
     const len = binaryString.length;
@@ -72,22 +76,38 @@ function writeString(view, offset, string) {
 }
 // ---------------------------------------------
 
+
 const Generator = () => {
-    const { updateTextToSpeak, themeParams, isWebAppReady } = usePlayer();
-    const [prompt, setPrompt] = useState('Hello, this is a test of the Telegram Mini App Text-to-Speech generator.');
+    // Деструктурируем только необходимые данные
+    const { updateTextToSpeak } = usePlayer(); 
+    
+    // Инициализация состояний
+    const [prompt, setPrompt] = useState('Привет, это тестовое сообщение для приложения Text-to-Speech.');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [speechUrl, setSpeechUrl] = useState(null);
     
-    // Получаем цвет кнопки из темы TWA или используем заглушку Tailwind
-    const buttonColor = themeParams?.button_color || '#B06EFF';
+    // Для текстового поля, чтобы показать лимит символов
+    const MAX_CHARS = 5000;
 
+    // Функция для очистки ввода
+    const handleClear = useCallback(() => {
+        setPrompt('');
+        setError(null);
+        setSpeechUrl(null);
+        // Опционально: остановить воспроизведение, если оно идет
+        if (typeof window !== 'undefined' && window.audioPlayer) {
+            window.audioPlayer.pause();
+        }
+    }, []);
+
+    // Обработчик генерации речи
     const handleGenerateSpeech = useCallback(async () => {
-        if (!prompt || isLoading) return;
+        if (!prompt || isLoading || prompt.length > MAX_CHARS) return;
 
         setIsLoading(true);
         setError(null);
-        setSpeechUrl(null); // Сброс предыдущего URL
+        setSpeechUrl(null); 
 
         // Определяем payload для TTS
         const payload = {
@@ -111,7 +131,8 @@ const Generator = () => {
 
         while (attempts < maxAttempts) {
             try {
-                const response = await fetch(`${API_URL}${API_KEY}`, {
+                // Если API_KEY пуст, Canvas заменит его во время выполнения.
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -127,7 +148,6 @@ const Generator = () => {
                 const mimeType = part?.inlineData?.mimeType;
 
                 if (audioData && mimeType && mimeType.startsWith("audio/")) {
-                    // Извлечение sample rate из mimeType (e.g., audio/L16;rate=24000)
                     const rateMatch = mimeType.match(/rate=(\d+)/);
                     const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
                     
@@ -136,13 +156,19 @@ const Generator = () => {
                     const wavBlob = pcmToWav(pcm16, sampleRate);
                     const newAudioUrl = URL.createObjectURL(wavBlob);
                     
-                    // Обновляем контекст плеера для воспроизведения
                     updateTextToSpeak(prompt);
                     setSpeechUrl(newAudioUrl);
                     
-                    // Немедленное воспроизведение
-                    const audio = new Audio(newAudioUrl);
-                    audio.play();
+                    // Воспроизведение аудио
+                    if (typeof window !== 'undefined') {
+                         if (window.audioPlayer) {
+                             window.audioPlayer.pause();
+                             window.audioPlayer.src = newAudioUrl;
+                         } else {
+                             window.audioPlayer = new Audio(newAudioUrl);
+                         }
+                         window.audioPlayer.play();
+                    }
 
                     setIsLoading(false);
                     return;
@@ -153,19 +179,21 @@ const Generator = () => {
                 console.error(`Attempt ${attempts + 1} failed:`, err);
                 attempts++;
                 if (attempts < maxAttempts) {
-                    // Экспоненциальная задержка
                     await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempts - 1)));
                 } else {
-                    setError(`Failed to generate speech after ${maxAttempts} attempts: ${err.message}`);
+                    setError(`Ошибка генерации речи: ${err.message}`);
                 }
             }
         }
         setIsLoading(false);
     }, [prompt, isLoading, updateTextToSpeak]);
 
+    // Определяем, активна ли кнопка "Генерировать"
+    const isGenerateDisabled = isLoading || prompt.length === 0 || prompt.length > MAX_CHARS;
+
     return (
         <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-txt-primary">Сгенерировать речь</h2>
+            <h2 className="text-xl font-semibold text-txt-primary">Генератор речи</h2>
             <p className="text-txt-secondary text-sm">Введите текст, который хотите озвучить. Используйте естественный язык для контроля тона (например, "Скажи радостно: ...").</p>
             
             <textarea
@@ -175,24 +203,41 @@ const Generator = () => {
                 onChange={(e) => setPrompt(e.target.value)}
                 disabled={isLoading}
             />
+            
+            {/* Статус и лимит символов */}
+            <div className="flex justify-between items-center text-xs">
+                <span className={`transition-colors duration-200 ${prompt.length > MAX_CHARS ? 'text-red-500 font-bold' : 'text-txt-secondary'}`}>
+                    {prompt.length} / {MAX_CHARS} символов
+                </span>
+                <span className="text-txt-secondary">
+                    Голос: По умолчанию (Kore)
+                </span>
+            </div>
 
-            {/* Кнопка генерации */}
+            {/* Кнопка генерации (Исправлено: используется класс btn-primary) */}
             <button
-                className={`button-neon w-full flex items-center justify-center font-bold py-3 px-4 rounded-xl transition-all duration-200 shadow-neon text-txt-primary ${
-                    isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:opacity-90'
-                }`}
-                style={{ backgroundColor: buttonColor }}
+                className={`btn-primary w-full flex items-center justify-center`}
                 onClick={handleGenerateSpeech}
-                disabled={isLoading}
+                disabled={isGenerateDisabled}
             >
                 {isLoading ? (
                     <div className="flex items-center space-x-2">
-                        <Loader2 className="animate-spin h-5 w-5 mr-3" />
+                        {/* Используем mr-2 для отступа иконки */}
+                        <Loader2 className="animate-spin h-5 w-5 mr-2" /> 
                         <span>Генерация аудио...</span>
                     </div>
                 ) : (
-                    'Сгенерировать и Воспроизвести Речь'
+                    'Слушать Голосом'
                 )}
+            </button>
+            
+            {/* Кнопка очистки */}
+            <button
+                className="w-full text-center text-txt-secondary hover:text-red-400 py-1 transition-colors duration-200"
+                onClick={handleClear}
+                disabled={isLoading}
+            >
+                Очистить Ввод
             </button>
 
             {/* Сообщения об ошибках и статусе */}
