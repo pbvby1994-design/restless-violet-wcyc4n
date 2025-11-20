@@ -1,13 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-// Импортируем WebApp динамически или обрабатываем его использование
-import WebApp from '@twa-dev/sdk'; 
+// 🛑 УДАЛЕН импорт WebApp, который вызывал ошибку SSR!
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { randomUUID } from 'crypto'; // Для генерации ID анонимного пользователя (на случай сбоя Auth)
 
 // --- Инициализация конфигурации Firebase из переменных окружения Next.js ---
-// Next.js автоматически предоставляет доступ к переменным, начинающимся с NEXT_PUBLIC_
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -17,14 +14,12 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Заглушки, поскольку кастомные токены и App ID теперь в конфиге выше.
 const appId = firebaseConfig.appId || 'default-app-id';
 const initialAuthToken = null; 
-// ---------------------------------------------\n
 
 let app, db, auth;
-// Инициализация Firebase ТОЛЬКО на клиенте и ТОЛЬКО если есть API Key
-if (firebaseConfig.apiKey && typeof window !== 'undefined') {
+// Инициализация Firebase ТОЛЬКО на клиенте (безопасно)
+if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
@@ -48,14 +43,13 @@ const PlayerContext = createContext({
   appId: appId,
 });
 
-// Пользовательский хук для использования контекста
 export const usePlayer = () => useContext(PlayerContext);
 
-// Компонент провайдера
 export const PlayerProvider = ({ children }) => {
-  // Состояния TWA
-  const [themeParams, setThemeParams] = useState(WebApp.themeParams || {});
-  const [isWebAppReady, setIsWebAppReady] = useState(WebApp.ready);
+  // ✅ ИСПРАВЛЕНИЕ SSR: Инициализация с безопасными значениями
+  // WebApp доступен только на клиенте, поэтому инициализируем с безопасными значениями.
+  const [themeParams, setThemeParams] = useState({});
+  const [isWebAppReady, setIsWebAppReady] = useState(false);
   
   // Состояния Auth/DB
   const [userId, setUserId] = useState(null);
@@ -64,33 +58,43 @@ export const PlayerProvider = ({ children }) => {
   // Состояние ввода текста
   const [textToSpeak, setTextToSpeak] = useState('');
 
-  // 1. Инициализация Telegram WebApp SDK
+  // 1. Инициализация Telegram WebApp SDK (ТОЛЬКО на клиенте)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    // Проверяем, что мы на клиенте И что глобальный объект TWA доступен
+    if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
+      // ✅ БЕЗОПАСНОЕ ИСПОЛЬЗОВАНИЕ: Получаем объект WebApp только внутри useEffect
+      const WebApp = window.Telegram.WebApp; 
+      
       // Инициализация цветов темы
-      setThemeParams(WebApp.themeParams);
-      setIsWebAppReady(WebApp.ready);
+      setThemeParams(WebApp.themeParams || {});
+      setIsWebAppReady(WebApp.ready || false);
       
       // Обработчик события изменения темы
-      WebApp.onEvent('themeChanged', () => {
-        setThemeParams(WebApp.themeParams);
-      });
+      const handleThemeChange = () => {
+        setThemeParams(WebApp.themeParams || {});
+      };
+      WebApp.onEvent('themeChanged', handleThemeChange);
       
-      // Установка MainButton (временно, для примера)
-      WebApp.MainButton.setText('Генератор Голоса');
-      WebApp.MainButton.show();
-      
+      // Установка MainButton
+      if (WebApp.MainButton) {
+        WebApp.MainButton.setText('Генератор Голоса');
+        WebApp.MainButton.show();
+      }
+
       // Чистка
-      return () => WebApp.offEvent('themeChanged', setThemeParams);
+      return () => {
+        if (WebApp.offEvent) {
+          WebApp.offEvent('themeChanged', handleThemeChange);
+        }
+      };
     }
-  }, []);
+  }, []); // Пустой массив зависимостей: запускается один раз при монтировании на клиенте
 
   // 2. Инициализация Firebase Auth (ТОЛЬКО на клиенте)
   useEffect(() => {
     // Выходим, если не на клиенте ИЛИ нет объекта Auth
     if (typeof window === 'undefined' || !auth) {
       if (!auth) console.warn("Firebase Auth object is null. Check Firebase config.");
-      // Считаем готовым для SSR/локальных тестов
       setIsAuthReady(true); 
       return;
     }
@@ -98,10 +102,8 @@ export const PlayerProvider = ({ children }) => {
     const initAuth = async () => {
       try {
         if (initialAuthToken) {
-          // Если бы мы использовали Custom Token
           await signInWithCustomToken(auth, initialAuthToken);
         } else {
-          // Основной метод для TWA: Анонимная аутентификация
           await signInAnonymously(auth);
         }
       } catch (error) {
@@ -115,15 +117,14 @@ export const PlayerProvider = ({ children }) => {
       if (user) {
         setUserId(user.uid);
       } else {
-        // Если аутентификация по какой-то причине не удалась, генерируем временный ID 
-        // для локальных тестов, но в продакшене это нужно перехватить.
-        setUserId(crypto.randomUUID()); 
+        // Запасной ID, если Auth не удался, для совместимости в других компонентах
+        setUserId(`stub-${Date.now()}-${Math.random().toString(36).substring(2)}`); 
       }
       setIsAuthReady(true);
     });
 
     return () => unsubscribe();
-  }, [auth]); // Зависимость от объекта auth
+  }, [auth]); 
 
   // Функция для обновления текста
   const updateTextToSpeak = useCallback((newText) => {
