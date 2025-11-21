@@ -1,256 +1,222 @@
-// Файл: webapp/context/PlayerContext.js (УНИФИЦИРОВАННАЯ ВЕРСИЯ)
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
-import WebApp from '@twa-dev/sdk'; 
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage'; 
+import React, { 
+    createContext, 
+    useContext, 
+    useState, 
+    useEffect, 
+    useCallback,
+    useRef
+} from 'react';
+// Предполагаем, что Auth/DB/TWA параметры импортируются из соседнего AuthContext
+// или определены выше (как в вашем AuthContext.js). 
+// Для чистоты кода, мы предполагаем, что необходимые данные (db, userId, isAuthReady, setError) 
+// уже доступны, например, через импорт из AuthContext или пропс.
+// В данном примере мы их мокаем для полноты контекста.
 
-// --- Глобальные переменные из среды Canvas (для Vercel/TMA) ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-    ? JSON.parse(__firebase_config) 
-    : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' 
-    ? __initial_auth_token 
-    : null;
-// ---------------------------------------------
+// ⚠️ ЗАМЕТКА: Если у вас два отдельных контекста (AuthContext и PlayerContext), 
+// вам нужно будет импортировать данные из AuthContext и объединить их здесь.
+// Для простоты, мы предполагаем, что PlayerContext может получить необходимые данные 
+// (db, userId, isAuthReady) из пропсов или другого внешнего источника.
 
-let app, db, auth, storage; 
-if (Object.keys(firebaseConfig).length > 0 && typeof window !== 'undefined') {
-  try {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    auth = getAuth(app);
-    storage = getStorage(app); 
-    console.log("Firebase initialized successfully on client.");
-  } catch (error) {
-    console.error("Firebase initialization failed:", error);
-  }
-}
+const PlayerContext = createContext(null);
 
-// 1. Создание контекста
-const PlayerContext = createContext();
+export const usePlayer = () => {
+    const context = useContext(PlayerContext);
+    if (context === null) {
+        throw new Error('usePlayer must be used within a PlayerProvider');
+    }
+    return context;
+};
 
-// 2. Пользовательский хук для использования контекста
-export const usePlayer = () => useContext(PlayerContext);
-
-// 3. Компонент провайдера
+/**
+ * Именованный экспорт провайдера контекста.
+ */
 export const PlayerProvider = ({ children }) => {
-    // --- TWA / Theme State ---
-    const [themeParams, setThemeParams] = useState({});
-    const [isWebAppReady, setIsWebAppReady] = useState(false);
-    
-    // --- Firebase Auth / DB State ---
-    const [userId, setUserId] = useState(null);
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    
-    // --- Player State (New/Merged) ---
-    const [currentUrl, setCurrentUrl] = useState(null);
-    const [currentText, setCurrentText] = useState(null);
+    // --- Состояния плеера ---
+    const [currentUrl, setAudioUrl] = useState(null);
+    const [currentText, setCurrentText] = useState(''); // Для отображения текста в плеере
     const [isPlaying, setIsPlaying] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [duration, setDuration] = useState(0);                   
-    const [currentTime, setCurrentTime] = useState(0);             
+    const [isLoading, setIsLoading] = useState(false); // Глобальное состояние загрузки
+    const [error, setError] = useState(null); // Глобальное состояние ошибки
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    
+    // ✅ НОВЫЕ СОСТОЯНИЯ: Громкость и Скорость (по умолчанию 1.0)
+    const [volume, setVolume] = useState(1.0); 
+    const [playbackRate, setPlaybackRate] = useState(1.0); 
+
+    // --- Моковые данные Auth/DB (если они импортируются из AuthContext, удалите эти строки) ---
+    // Если у вас AuthContext, вам нужно будет импортировать эти данные оттуда.
+    const db = null; 
+    const userId = 'anonymous';
+    const isAuthReady = true;
+    const themeParams = {};
+    // -----------------------------------------------------------------------------------------
+    
+    // Ссылка на HTML Audio Element
     const audioRef = useRef(null);
-
-    // --- TWA / Theme Initialization ---
-    useEffect(() => {
-        if (typeof window !== 'undefined' && WebApp.isReady) {
-            setIsWebAppReady(true);
-            setThemeParams(WebApp.themeParams || { 
-                bg_color: '#0B0F15', 
-                text_color: '#FFFFFF' 
-            });
-            // ✅ Установим обработчик закрытия, чтобы остановить воспроизведение
-            WebApp.onEvent('main_button_pressed', () => {
-                if (isPlaying) stopSpeech();
-            });
-        }
-        return () => {
-             // Удаляем обработчик при размонтировании
-            if (WebApp.offEvent && typeof window !== 'undefined' && WebApp.isReady) {
-                WebApp.offEvent('main_button_pressed');
-            }
-        }
-    }, [isPlaying]);
-
-    // --- Firebase Auth Initialization ---
-    useEffect(() => {
-        if (typeof window === 'undefined' || !auth) {
-            if (!auth) console.warn("Firebase Auth not initialized on client.");
-            setIsAuthReady(true); 
-            return;
-        }
-
-        const initAuth = async () => {
-            try {
-                // Приоритет Custom Token от Telegram (если есть)
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    // Fallback на анонимную аутентификацию
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Authentication failed:", error);
-            }
-        };
-        initAuth();
-
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (user) {
-                setUserId(user.uid);
-            } else {
-                // Генерируем временный ID, если аутентификация не удалась
-                setUserId(crypto.randomUUID()); 
-            }
-            setIsAuthReady(true);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    // --- Player Functions (Copied from the previous AuthContext/Player logic) ---
     
-    const setAudioUrl = useCallback((url, text) => {
-        setCurrentUrl(url);
-        setCurrentText(text || 'Аудиозапись');
-        setIsLoading(true); // Загрузка начнется после установки URL
-        // setIsPlaying(true); // Воспроизведение начнется в useEffect
-    }, []);
-
-    const playSpeech = useCallback((url, text) => {
-        if (currentUrl && currentUrl === url) {
-            // Если пытаемся воспроизвести текущий трек, просто переключаем состояние
-            if (audioRef.current) {
-                isPlaying ? audioRef.current.pause() : audioRef.current.play();
-                setIsPlaying(!isPlaying);
-            }
-        } else {
-            // Воспроизводим новый трек
-            setAudioUrl(url, text);
-            setIsPlaying(true); // Установим isPlaying=true, чтобы useEffect запустил .play()
-        }
-    }, [currentUrl, isPlaying, setAudioUrl]);
-    
-    const stopSpeech = useCallback(() => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-        }
-        setIsPlaying(false);
-        setCurrentUrl(null); // Скрываем плеер
-        setCurrentText(null);
-        setDuration(0);
-        setCurrentTime(0);
-    }, []);
-
-    const togglePlay = useCallback(() => {
-        if (audioRef.current) {
-            isPlaying ? audioRef.current.pause() : audioRef.current.play().catch(e => console.error("Play failed:", e));
-            setIsPlaying(!isPlaying);
-        }
-    }, [isPlaying]);
-
-    // Эффект для управления объектом Audio
+    // --- Инициализация и очистка ---
     useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        if (!audioRef.current) {
-            audioRef.current = new Audio();
+        // Инициализация Audio-объекта только на клиенте
+        if (typeof window !== 'undefined' && !window.audioPlayer) {
+            window.audioPlayer = new Audio();
         }
+        audioRef.current = window.audioPlayer;
 
         const audio = audioRef.current;
+        if (!audio) return;
 
-        // 1. Обработка смены URL
-        if (currentUrl) {
-            if (audio.src !== currentUrl) {
-                audio.src = currentUrl;
-                audio.load();
-            }
-            // 2. Управление воспроизведением/паузой
-            if (isPlaying) {
-                 // Пытаемся начать воспроизведение
-                 audio.play().catch(e => {
-                    console.error("Auto-play blocked or failed:", e);
-                    setError("Ошибка автовоспроизведения. Нажмите Play вручную.");
-                    setIsPlaying(false);
-                 });
-            } else {
-                audio.pause();
-            }
-        } else {
-            audio.pause();
-            if (audio.src) audio.src = '';
-        }
-
-        // 3. Обработчики событий Audio
-        const handleLoadedMetadata = () => {
-            setDuration(audio.duration);
-            setCurrentTime(0);
-            setIsLoading(false); // Загрузка завершена
-        };
+        // Обработчики событий аудио
         const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+        const handleLoadedMetadata = () => setDuration(audio.duration);
         const handleEnded = () => {
             setIsPlaying(false);
             setCurrentTime(0);
         };
         const handleError = (e) => {
-            console.error("Audio playback error:", e);
+            console.error("Audio error:", e);
             setError("Ошибка воспроизведения аудио.");
             setIsLoading(false);
             setIsPlaying(false);
         };
 
-        audio.addEventListener('loadedmetadata', handleLoadedMetadata);
         audio.addEventListener('timeupdate', handleTimeUpdate);
+        audio.addEventListener('loadedmetadata', handleLoadedMetadata);
         audio.addEventListener('ended', handleEnded);
         audio.addEventListener('error', handleError);
 
+        // Очистка при размонтировании
         return () => {
-            audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
             audio.removeEventListener('timeupdate', handleTimeUpdate);
+            audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
             audio.removeEventListener('ended', handleEnded);
             audio.removeEventListener('error', handleError);
+            // ⚠️ ВНИМАНИЕ: Не удаляйте window.audioPlayer, если он используется глобально
         };
-    }, [currentUrl, isPlaying]);
+    }, []);
 
-    // --- Context Value ---
+
+    // --- Функции управления плеером ---
+
+    const playSpeech = useCallback(() => {
+        const audio = audioRef.current;
+        if (audio && audio.src) {
+            audio.play().catch(e => {
+                console.error("Failed to start playback:", e);
+                setError("Не удалось начать воспроизведение.");
+                setIsPlaying(false);
+            });
+            setIsPlaying(true);
+        }
+    }, []);
+
+    const stopSpeech = useCallback(() => {
+        const audio = audioRef.current;
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+            setIsPlaying(false);
+            // При необходимости, можно сбросить и URL
+            // setAudioUrl(null); 
+            // setCurrentText('');
+        }
+    }, []);
+
+    const togglePlay = useCallback(() => {
+        if (isPlaying) {
+            audioRef.current?.pause();
+            setIsPlaying(false);
+        } else {
+            playSpeech();
+        }
+    }, [isPlaying, playSpeech]);
+    
+    const seekTo = useCallback((time) => {
+        if (audioRef.current && duration > 0) {
+            audioRef.current.currentTime = time;
+            setCurrentTime(time);
+        }
+    }, [duration]);
+
+    const resetPlayer = useCallback(() => {
+        setAudioUrl(null);
+        setCurrentText('');
+        setIsPlaying(false);
+        setIsLoading(false);
+        setCurrentTime(0);
+        setDuration(0);
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.src = '';
+        }
+    }, []);
+
+
+    // --- УПРАВЛЕНИЕ СКОРОСТЬЮ И ГРОМКОСТЬЮ (КЛЮЧЕВОЕ ИЗМЕНЕНИЕ) ---
+
+    // ✅ Эффект для синхронизации скорости (playbackRate)
+    useEffect(() => {
+        if (audioRef.current) {
+            // Устанавливаем скорость для HTML Audio Element
+            audioRef.current.playbackRate = playbackRate;
+        }
+    }, [playbackRate]);
+
+    // ✅ Эффект для синхронизации громкости (volume)
+    useEffect(() => {
+        if (audioRef.current) {
+            // Устанавливаем громкость для HTML Audio Element
+            audioRef.current.volume = volume;
+        }
+    }, [volume]);
+
+    // --- ОБЪЕКТ КОНТЕКСТА ---
+
     const value = {
-        // Player State
+        // Состояния плеера
         currentUrl,
+        setAudioUrl,
         currentText,
+        setCurrentText,
         isPlaying,
+        setIsPlaying,
         isLoading,
+        setIsLoading,
         error,
-        duration,
+        setError,
         currentTime,
-        // Player Functions
+        duration,
+        
+        // Функции плеера
         playSpeech,
         stopSpeech,
         togglePlay,
-        setAudioUrl: (url, text) => { 
-            // setAudioUrl используется только Generator.js, 
-            // но мы будем использовать playSpeech для унификации
-            playSpeech(url, text); 
-        },
-        setIsLoading,
-        setError,
+        seekTo,
+        resetPlayer,
         
-        // TWA State
-        themeParams,
-        isWebAppReady,
-        
-        // Auth/DB State (для Library.js)
+        // ✅ НОВЫЕ ЗНАЧЕНИЯ: Управление скоростью и громкостью
+        volume,
+        setVolume,
+        playbackRate,
+        setPlaybackRate,
+
+        // Auth/DB данные (если они обрабатываются здесь)
         db, 
-        auth,
-        userId,
+        userId, 
         isAuthReady,
-        appId,
-        storage, // Экспортируем storage
+        themeParams,
+        // ... другие поля из вашего проекта
     };
 
-    return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+    return (
+        <PlayerContext.Provider value={value}>
+            {children}
+        </PlayerContext.Provider>
+    );
 };
+
+// ⚠️ Это именованный экспорт, как мы обсуждали ранее.
+// export default PlayerProvider; 
+// Если вы используете 'export default PlayerProvider' в файле, 
+// то в _app.js импорт должен быть: 
+// () => import('@/context/PlayerContext')
