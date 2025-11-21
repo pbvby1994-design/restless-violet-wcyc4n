@@ -1,17 +1,25 @@
 // Файл: webapp/pages/library.js
-"use client"; // Оставляем, так как страница использует клиентский код
+"use client"; 
 
 import dynamic from 'next/dynamic';
-import Library from '@/components/Library';
-import MiniPlayer from '@/components/MiniPlayer';
 
-// ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Динамический импорт Layout с отключенным SSR.
+// ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Динамический импорт для всех компонентов.
 const DynamicLayout = dynamic(() => import('@/components/Layout'), { 
     ssr: false 
 });
+// Library использует useState, useEffect, Firebase (клиентский DB).
+const DynamicLibrary = dynamic(() => import('@/components/Library'), { 
+    ssr: false 
+});
+// MiniPlayer использует window.audioPlayer (Audio API).
+const DynamicMiniPlayer = dynamic(() => import('@/components/MiniPlayer'), { 
+    ssr: false 
+});
+
 
 export default function LibraryPage() {
-  // Логика handlePlayFromLibrary остается в этом файле
+  // ⚠️ Убедитесь, что usePlayer и playSpeech импортированы и доступны здесь, 
+  // если вы решите реализовать эту логику.
   const handlePlayFromLibrary = (record) => {
     // const { setAudioUrl, setCurrentText, playSpeech } = usePlayer();
     // setAudioUrl(record.audioUrl);
@@ -21,8 +29,8 @@ export default function LibraryPage() {
   
   return (
     <DynamicLayout>
-      <Library onPlay={handlePlayFromLibrary} />
-      <MiniPlayer />
+      <DynamicLibrary onPlay={handlePlayFromLibrary} />
+      <DynamicMiniPlayer />
     </DynamicLayout>
   );
 }
