@@ -8,6 +8,8 @@ import React, {
     useCallback,
     useRef
 } from 'react';
+// Импортируем AuthContext, чтобы получить db, userId и т.д.
+import { useAuth } from './AuthContext';
 
 const PlayerContext = createContext(null);
 
@@ -23,6 +25,15 @@ export const usePlayer = () => {
  * Именованный экспорт провайдера контекста.
  */
 export const PlayerProvider = ({ children }) => {
+    // --- Получение данных аутентификации ---
+    const { 
+        db, 
+        userId, 
+        isAuthReady, 
+        themeParams, 
+        isWebAppReady,
+    } = useAuth() || {};
+
     // --- Состояния плеера ---
     const [currentUrl, setAudioUrl] = useState(null);
     const [currentText, setCurrentText] = useState(''); 
@@ -36,27 +47,26 @@ export const PlayerProvider = ({ children }) => {
     const [volume, setVolume] = useState(1.0); 
     const [playbackRate, setPlaybackRate] = useState(1.0); 
 
-    // --- (Моковые/импортированные данные Auth/DB - замените на useAuth() при необходимости) ---
-    const db = null; 
-    const userId = 'anonymous';
-    const isAuthReady = true;
-    const themeParams = {};
-    // -----------------------------------------------------------------------------------------
-    
-    // Ссылка на HTML Audio Element
     const audioRef = useRef(null);
     
     // --- Инициализация Audio-объекта и обработчиков ---
     useEffect(() => {
-        if (typeof window !== 'undefined' && !window.audioPlayer) {
-            window.audioPlayer = new Audio();
+        if (typeof window !== 'undefined') {
+             // Инициализируем или получаем существующий глобальный плеер
+            if (!window.audioPlayer) {
+                window.audioPlayer = new Audio();
+            }
+            audioRef.current = window.audioPlayer;
         }
-        audioRef.current = window.audioPlayer;
 
         const audio = audioRef.current;
         if (!audio) return;
 
-        // Обработчики событий аудио (timeupdate, loadedmetadata, ended, error)
+        // Применяем начальные значения
+        audio.volume = volume;
+        audio.playbackRate = playbackRate;
+
+        // Обработчики событий аудио
         const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
         const handleLoadedMetadata = () => setDuration(audio.duration);
         const handleEnded = () => {
@@ -81,11 +91,9 @@ export const PlayerProvider = ({ children }) => {
             audio.removeEventListener('ended', handleEnded);
             audio.removeEventListener('error', handleError);
         };
-    }, []);
+    }, []); 
 
-
-    // --- Функции управления плеером (playSpeech, stopSpeech, togglePlay, seekTo) ---
-
+    // --- Функции управления плеером ---
     const playSpeech = useCallback(() => {
         const audio = audioRef.current;
         if (audio && audio.src) {
@@ -96,7 +104,7 @@ export const PlayerProvider = ({ children }) => {
             });
             setIsPlaying(true);
         }
-    }, []);
+    }, [setError]); 
 
     const togglePlay = useCallback(() => {
         if (isPlaying) {
@@ -107,9 +115,28 @@ export const PlayerProvider = ({ children }) => {
         }
     }, [isPlaying, playSpeech]);
     
-    // ... (остальные функции управления)
+    const seekTo = useCallback((time) => {
+        if (audioRef.current && duration > 0) {
+            audioRef.current.currentTime = time;
+            setCurrentTime(time);
+        }
+    }, [duration]);
 
-    // --- УПРАВЛЕНИЕ СКОРОСТЬЮ И ГРОМКОСТЬЮ (КЛЮЧЕВОЕ ИЗМЕНЕНИЕ) ---
+    const resetPlayer = useCallback(() => {
+        setAudioUrl(null);
+        setCurrentText('');
+        setIsPlaying(false);
+        setIsLoading(false);
+        setCurrentTime(0);
+        setDuration(0);
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.src = '';
+        }
+    }, []);
+
+
+    // --- УПРАВЛЕНИЕ СКОРОСТЬЮ И ГРОМКОСТЬЮ (РЕАЛИЗАЦИЯ) ---
 
     // ✅ Эффект для синхронизации скорости (playbackRate)
     useEffect(() => {
@@ -130,13 +157,20 @@ export const PlayerProvider = ({ children }) => {
     const value = {
         // ... (все существующие состояния и функции)
         
-        // ✅ НОВЫЕ ЗНАЧЕНИЯ: Управление скоростью и громкостью
+        // Управление скоростью и громкостью
         volume,
         setVolume,
         playbackRate,
         setPlaybackRate,
 
-        // ... (Auth/DB данные)
+        // Auth/DB данные, проксируемые из AuthContext
+        db, 
+        userId, 
+        isAuthReady,
+        themeParams,
+        isWebAppReady,
+        
+        // ... (остальные поля)
     };
 
     return (
