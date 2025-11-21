@@ -1,174 +1,112 @@
 // Файл: webapp/components/MiniPlayer.js
+"use client"; // <-- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ
+
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { usePlayer } from '@/context/PlayerContext';
 import { Play, Pause, StopCircle } from 'lucide-react';
 
+/**
+ * Утилита для форматирования времени (секунды -> "М:СС")
+ */
+const formatTime = (time) => {
+    if (!time || isNaN(time) || time < 0) return "0:00";
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
 const MiniPlayer = () => {
-    const { currentUrl, currentText, isPlaying, playSpeech, stopSpeech } = usePlayer();
-    const [audioDuration, setAudioDuration] = useState(0);
-    const [currentTime, setCurrentTime] = useState(0);
-    const audioRef = useRef(null);
+    // Используем только глобальные состояния из PlayerContext, чтобы избежать конфликтов
+    const { 
+        currentUrl, 
+        currentText, 
+        isPlaying, 
+        togglePlay, 
+        stopSpeech, 
+        currentTime, // Используем глобальное currentTime
+        duration,    // Используем глобальное duration
+        seekTo,
+        isLoading
+    } = usePlayer();
 
-    // Инициализация Audio Player
-    useEffect(() => {
-        if (typeof window !== 'undefined' && currentUrl) {
-            // Используем глобальный audioPlayer, как определено в Generator.js
-            if (!window.audioPlayer) {
-                window.audioPlayer = new Audio();
-            }
-            audioRef.current = window.audioPlayer;
-
-            const audio = audioRef.current;
-            audio.src = currentUrl;
-            
-            // Загрузка метаданных (длительность)
-            const handleLoadedMetadata = () => {
-                setAudioDuration(audio.duration);
-                setCurrentTime(0);
-                if (isPlaying) {
-                     // Убедимся, что воспроизведение начинается при смене URL
-                     audio.play().catch(e => console.error("Play failed:", e)); 
-                }
-            };
-
-            // Обновление текущего времени
-            const handleTimeUpdate = () => {
-                setCurrentTime(audio.currentTime);
-            };
-
-            // Воспроизведение завершено
-            const handleEnded = () => {
-                stopSpeech();
-            };
-
-            audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-            audio.addEventListener('timeupdate', handleTimeUpdate);
-            audio.addEventListener('ended', handleEnded);
-
-            return () => {
-                // Очистка слушателей
-                audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                audio.removeEventListener('timeupdate', handleTimeUpdate);
-                audio.removeEventListener('ended', handleEnded);
-            };
-        }
-    }, [currentUrl, isPlaying, stopSpeech]);
-    
-    // Синхронизация между контекстом и элементом <audio>
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (audio) {
-            if (isPlaying) {
-                audio.play().catch(e => console.error("Play failed:", e));
-            } else {
-                audio.pause();
-            }
-        }
-    }, [isPlaying]);
-
-    // Форматирование времени в MM:SS
-    const formatTime = (seconds) => {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = Math.floor(seconds % 60);
-        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-    };
-
-    // Обработчик нажатия на ползунок
-    const handleSeek = useCallback((e) => {
-        const seekTime = parseFloat(e.target.value);
-        if (audioRef.current) {
-            audioRef.current.currentTime = seekTime;
-            setCurrentTime(seekTime);
-        }
-    }, []);
-
-    // Если нет активного аудио, не отображаем плеер
-    if (!currentUrl) {
+    // Мини-плеер виден только если есть что играть или идет загрузка
+    if (!currentUrl && !isLoading) {
         return null;
     }
+    
+    const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-    // Обработчик кнопки Play/Pause
-    const handlePlayPause = () => {
-        if (isPlaying) {
-            stopSpeech();
-        } else {
-            // Воспроизводим текущий URL
-            playSpeech(currentUrl, currentText); 
-        }
+    // Обработчик перемотки
+    const handleSeek = (e) => {
+        seekTo(parseFloat(e.target.value));
     };
-    
-    // Вычисляем процент заполнения для прогресс-бара
-    const progressPercent = audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0;
-    
+
+
     return (
-        // Используем card-glass для стилизации
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-bg-default/90 backdrop-blur-sm border-t border-gray-700/50 shadow-2xl z-50">
-            <div className="card-glass flex items-center p-3">
+        // Контейнер Мини-плеера (Фиксирован внизу, над PlayerControl)
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-16 bg-gray-900/90 backdrop-blur-sm border-t border-gray-700/50 lg:pb-4">
+            <div className="max-w-xl mx-auto flex items-center justify-between">
                 
                 {/* 1. Кнопка Play/Pause */}
-                <button 
-                    className="p-2 rounded-full bg-accent-neon text-white hover:bg-accent-light transition-colors duration-200 shadow-neon"
-                    onClick={handlePlayPause}
-                    title={isPlaying ? "Пауза" : "Воспроизвести"}
+                <button
+                    onClick={togglePlay}
+                    className="p-3 rounded-full bg-accent-neon text-gray-900 hover:bg-accent-neon/80 transition-colors duration-200 shadow-md flex-shrink-0"
+                    title={isPlaying ? 'Пауза' : 'Воспроизвести'}
+                    disabled={isLoading}
                 >
-                    {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                    {isLoading ? (
+                         <StopCircle className="h-6 w-6 animate-pulse" />
+                    ) : isPlaying ? (
+                        <Pause className="h-6 w-6 fill-current" />
+                    ) : (
+                        <Play className="h-6 w-6 fill-current" />
+                    )}
                 </button>
-                
-                <div className="flex-1 ml-3 min-w-0">
-                    {/* 2. Текст и Эквалайзер (для визуального эффекта) */}
-                    <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-txt-primary truncate font-semibold">
-                            {currentText.length > 50 ? `${currentText.substring(0, 50)}...` : currentText}
-                        </span>
-                        {/* Эквалайзер, который появляется во время воспроизведения */}
-                        {isPlaying && (
-                            <div className="h-4 w-12 flex items-end ml-2">
-                                <span className="bar" style={{height: '80%'}}></span>
-                                <span className="bar" style={{height: '40%'}}></span>
-                                <span className="bar" style={{height: '60%'}}></span>
-                                <span className="bar" style={{height: '90%'}}></span>
-                                <span className="bar" style={{height: '50%'}}></span>
-                            </div>
-                        )}
-                    </div>
 
-                    {/* 3. Прогресс-бар и Таймеры */}
-                    <div className="flex items-center space-x-2">
+                {/* 2. Контент и Прогресс */}
+                <div className="flex-1 min-w-0 mx-4">
+                    <p className="text-sm font-semibold text-white truncate">
+                        {currentText.substring(0, 70)}...
+                    </p>
+                    
+                    {/* 3. Прогресс-бар с ползунком */}
+                    <div className="flex items-center space-x-2 mt-1">
                         <span className="text-xs text-txt-secondary flex-shrink-0">
                             {formatTime(currentTime)}
                         </span>
-                        
-                        <div className="flex-1 relative h-1.5 bg-gray-600 rounded-full cursor-pointer group">
-                            {/* Скрытый input range для управления */}
+
+                        <div className="relative flex-1 h-3 group">
+                            {/* Невидимый ползунок для управления */}
                             <input
                                 type="range"
                                 min="0"
-                                max={audioDuration}
+                                max={duration || 0}
+                                step="0.01"
                                 value={currentTime}
                                 onChange={handleSeek}
-                                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
+                                className="absolute top-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                disabled={!currentUrl || isLoading}
                             />
                             {/* Видимый прогресс-бар */}
                             <div 
-                                className="h-1.5 rounded-full bg-accent-neon transition-all duration-100" 
-                                style={{ width: `${progressPercent}%` }}
-                            ></div>
-                            {/* Ползунок */}
-                            <div 
-                                className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-white border-2 border-accent-neon transition-all duration-100 group-hover:w-4 group-hover:h-4 group-hover:border-4"
-                                style={{ left: `${progressPercent}%`, transform: `translate(-${progressPercent}%, -50%)` }}
-                            ></div>
+                                className="absolute top-1/2 -translate-y-1/2 w-full h-1.5 rounded-full bg-gray-700/50"
+                            >
+                                <div 
+                                    className="h-1.5 rounded-full bg-accent-neon transition-all duration-100" 
+                                    style={{ width: `${progressPercent}%` }}
+                                ></div>
+                            </div>
                         </div>
 
                         <span className="text-xs text-txt-secondary flex-shrink-0">
-                            {formatTime(audioDuration)}
+                            {formatTime(duration)}
                         </span>
                     </div>
                 </div>
 
                 {/* 4. Кнопка Стоп (сбоку) */}
                 <button 
-                    className="ml-3 p-1 rounded-full text-txt-secondary hover:text-red-400 transition-colors duration-200"
+                    className="ml-3 p-1 rounded-full text-txt-secondary hover:text-red-400 transition-colors duration-200 flex-shrink-0"
                     onClick={stopSpeech}
                     title="Остановить и Закрыть"
                 >
