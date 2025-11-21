@@ -1,4 +1,5 @@
 // Файл: webapp/pages/index.js
+"use client"; 
 import React, { useState } from 'react';
 // ✅ ДОБАВЛЯЕМ dynamic
 import dynamic from 'next/dynamic';
@@ -88,3 +89,4 @@ const Home = () => {
 };
 
 export default Home;
+
