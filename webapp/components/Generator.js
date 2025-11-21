@@ -1,3 +1,6 @@
+// Файл: webapp/components/Generator.js
+"use client"; // <-- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ
+
 import React, { useState, useCallback } from 'react';
 import { usePlayer } from '@/context/PlayerContext';
 import { Loader2 } from 'lucide-react'; // Импорт иконки загрузки
@@ -62,7 +65,8 @@ const Generator = () => {
             const audioBlob = await response.blob();
             
             // 3. Создаем URL для Blob
-            const audioUrl = URL.createObjectURL(audioBlob);
+            // ⚠️ Это клиентский API, и он должен вызываться только в клиентском компоненте
+            const audioUrl = URL.createObjectURL(audioBlob); 
 
             // 4. Обновляем контекст плеера
             setAudioUrl(audioUrl); 
