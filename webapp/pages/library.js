@@ -1,5 +1,5 @@
 // Файл: webapp/pages/library.js (Максимальная защита от SSR)
-
+"use client";
 import dynamic from 'next/dynamic'; // ✅ Только dynamic импортируется статически
 import { useRouter } from 'next/router';
 
