@@ -1,21 +1,28 @@
 // Файл: webapp/pages/index.js
-"use client"; // Оставляем, так как страница использует клиентский код
+"use client"; 
 
 import dynamic from 'next/dynamic';
-import Generator from '@/components/Generator';
-import MiniPlayer from '@/components/MiniPlayer';
 
-// ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Динамический импорт Layout с отключенным SSR.
-// Это гарантирует, что WebApp SDK внутри Layout.js будет инициализирован только в браузере.
+// ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Динамический импорт для всех компонентов, использующих клиентские API/хуки/библиотеки.
+// Layout использует TWA SDK.
 const DynamicLayout = dynamic(() => import('@/components/Layout'), { 
     ssr: false 
 });
+// Generator использует клиентскую логику, контекст.
+const DynamicGenerator = dynamic(() => import('@/components/Generator'), { 
+    ssr: false 
+});
+// MiniPlayer использует window.audioPlayer (Audio API).
+const DynamicMiniPlayer = dynamic(() => import('@/components/MiniPlayer'), { 
+    ssr: false 
+});
+
 
 export default function IndexPage() {
   return (
     <DynamicLayout>
-      <Generator />
-      <MiniPlayer />
+      <DynamicGenerator />
+      <DynamicMiniPlayer />
     </DynamicLayout>
   );
 }
