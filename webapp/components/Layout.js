@@ -1,4 +1,6 @@
 // Файл: webapp/components/Layout.js
+"use client"; // <-- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ
+
 import React, { useEffect } from 'react';
 // Импортируем WebApp
 import WebApp from '@twa-dev/sdk';
@@ -30,6 +32,10 @@ const Layout = ({ children }) => {
       // Устанавливаем цвета для нативных элементов Telegram
       WebApp.setHeaderColor(headerBg);
       WebApp.setBackgroundColor(mainBg);
+      
+      // Дополнительно: показываем главную кнопку, если она нужна
+      // WebApp.MainButton.setText('Сохранить');
+      // WebApp.MainButton.show();
     }
   }, [isWebAppReady, themeParams]); 
 
@@ -40,14 +46,16 @@ const Layout = ({ children }) => {
       // Используем цвета из TWA или заглушки
       style={{ backgroundColor: bgColor, color: textColor }} 
     >
-        <Header />
-        
-        {/* Центральный контейнер контента */}
-        <main className="flex-1 w-full max-w-lg mx-auto p-4 pt-6 pb-20">
-            {children}
-        </main>
-        
-        <Footer />
+        {/* Максимальная ширина для контента */}
+        <div className="w-full max-w-xl flex flex-col flex-1">
+            <Header bgColor={headerBgColor} textColor={textColor} />
+            
+            <main className="flex-1 p-4">
+                {children}
+            </main>
+            
+            <Footer bgColor={headerBgColor} textColor={textColor} />
+        </div>
     </div>
   );
 };
