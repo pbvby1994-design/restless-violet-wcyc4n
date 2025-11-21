@@ -19,6 +19,5 @@
         "src": "/(.*)",
         "dest": "/webapp/$1"
       }
-    ],
-    "analytics": false
+    ]
 }
