@@ -7,23 +7,25 @@ import Head from 'next/head';
 // Импорт Vercel Analytics
 import { Analytics } from '@vercel/analytics/react'; 
 
-// 1. Динамический импорт PlayerProvider (из-за TWA SDK, Firebase и Audio API)
-// PlayerProvider находится в файле context/PlayerContext.js и экспортируется по имени.
+// --- ДИНАМИЧЕСКИЕ ИМПОРТЫ (SSR: false) ---
+
+// 1. PlayerProvider (из-за TWA SDK, Firebase, Audio API)
+// ⚠️ КЛЮЧЕВОЙ МОМЕНТ: Используем .then(mod => mod.PlayerProvider), 
+// так как это ИМЕНОВАННЫЙ ЭКСПОРТ (PlayerProvider) в файле контекста.
 const DynamicPlayerProvider = dynamic(
-  // Используем .then(mod => mod.PlayerProvider), так как это именованный экспорт
   () => import('@/context/PlayerContext').then(mod => mod.PlayerProvider), 
   { 
-    ssr: false, // ⬅️ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Отключаем SSR
+    ssr: false, // ⬅️ Отключаем SSR
     loading: () => <div className="flex justify-center items-center h-screen bg-bg-default text-txt-secondary">Загрузка контекста...</div>
   }
 );
 
-// 2. Динамический импорт Layout (из-за использования usePlayer() и WebApp SDK)
-// Layout находится в components/Layout.js и экспортируется по умолчанию.
+// 2. Layout (из-за использования хуков, зависящих от PlayerProvider, и WebApp SDK)
+// Layout.js использует 'export default Layout', поэтому .then не нужен.
 const DynamicLayout = dynamic(
   () => import('@/components/Layout'),
   { 
-    ssr: false, // ⬅️ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Отключаем SSR
+    ssr: false, // ⬅️ Отключаем SSR
     loading: () => <div className="flex justify-center items-center h-screen bg-bg-default text-txt-secondary">Инициализация макета...</div>
   }
 );
@@ -34,7 +36,7 @@ const DynamicLayout = dynamic(
  */
 function App({ Component, pageProps }) {
   return (
-    // 1. PlayerProvider должен быть самым внешним для всего приложения
+    // 1. PlayerProvider должен быть самым внешним
     <DynamicPlayerProvider>
       <Head>
         <title>TTS App</title>
@@ -48,7 +50,7 @@ function App({ Component, pageProps }) {
         <Component {...pageProps} />
       </DynamicLayout>
 
-      {/* Vercel Analytics */}
+      {/* Vercel Analytics (если подключен) */}
       <Analytics />
       
     </DynamicPlayerProvider>
